@@ -127,3 +127,17 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Custom
+.DS_Store
+data/*
+resources/*
+.idea/*
+.Rhistory
+ChangeLog
+figures/*
+tables/*
+reports/eg/*.csv.gz
+reports/eg/*.hdf5
+reports/eg/lmm_gexp_crispr/
+reports/eg/lmm_protein_crispr/

@@ -24,6 +24,7 @@ import pandas as pd
 import pkg_resources
 import seaborn as sns
 import matplotlib.pyplot as plt
+from eg import DPATH
 from crispy.GIPlot import GIPlot
 from adjustText import adjust_text
 from crispy.CrispyPlot import CrispyPlot
@@ -34,7 +35,6 @@ from crispy.DataImporter import Proteomics, GeneExpression, Sample
 
 
 LOG = logging.getLogger("Crispy")
-DPATH = pkg_resources.resource_filename("crispy", "data")
 RPATH = pkg_resources.resource_filename("notebooks", "swath_proteomics/reports/")
 
 

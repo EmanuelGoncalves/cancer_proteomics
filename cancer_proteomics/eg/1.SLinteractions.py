@@ -24,10 +24,12 @@ import logging
 import argparse
 import pandas as pd
 import pkg_resources
+from eg import DPATH
 from natsort import natsorted
 from itertools import zip_longest
-from swath_proteomics.LMModels import LMModels
+from cancer_proteomics.eg.LMModels import LMModels
 from crispy.DataImporter import Proteomics, GeneExpression, CRISPR
+
 
 sys.path.extend(
     [
@@ -38,7 +40,6 @@ sys.path.extend(
 )
 
 LOG = logging.getLogger("Crispy")
-DPATH = pkg_resources.resource_filename("crispy", "data")
 RPATH = pkg_resources.resource_filename("notebooks", "swath_proteomics/reports/")
 
 

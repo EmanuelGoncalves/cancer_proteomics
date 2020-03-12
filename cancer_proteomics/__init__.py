@@ -4,6 +4,7 @@
 import sys
 import logging
 import seaborn as sns
+from crispy.CrispyPlot import CrispyPlot
 
 __version__ = "0.0.1"
 

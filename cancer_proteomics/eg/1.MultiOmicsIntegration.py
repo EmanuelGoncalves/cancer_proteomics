@@ -26,12 +26,12 @@ import pandas as pd
 import pkg_resources
 import seaborn as sns
 import matplotlib.pyplot as plt
+from eg import DPATH
 from crispy.GIPlot import GIPlot
 from scipy.stats import spearmanr
 from crispy.MOFA import MOFA, MOFAPlot
 from crispy.CrispyPlot import CrispyPlot
-from swath_proteomics.LMModels import LMModels
-from depmap.GExpThres import dim_reduction, plot_dim_reduction
+from cancer_proteomics.eg.LMModels import LMModels
 from crispy.DataImporter import (
     Proteomics,
     GeneExpression,
@@ -44,7 +44,6 @@ from crispy.DataImporter import (
 
 
 LOG = logging.getLogger("Crispy")
-DPATH = pkg_resources.resource_filename("crispy", "data")
 RPATH = pkg_resources.resource_filename("notebooks", "swath_proteomics/reports/")
 
 

@@ -25,6 +25,7 @@ import pkg_resources
 import seaborn as sns
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+from eg import DPATH
 from scipy.stats import pearsonr
 from crispy.GIPlot import GIPlot
 from crispy.Enrichment import Enrichment
@@ -35,7 +36,6 @@ from crispy.DataImporter import Proteomics, GeneExpression, CopyNumber
 
 
 LOG = logging.getLogger("Crispy")
-DPATH = pkg_resources.resource_filename("crispy", "data")
 RPATH = pkg_resources.resource_filename("notebooks", "swath_proteomics/reports/")
 
 

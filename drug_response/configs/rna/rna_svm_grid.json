@@ -1,0 +1,17 @@
+{
+  "meta_file": "/home/scai/SangerDrug/data/E0022_P01-P05_sample_map.txt",
+  "rna_file": "/home/scai/SangerDrug/data/rnaseq_voom.csv",
+  "ic50_file": "/home/scai/SangerDrug/data/DrugResponse_PANCANCER_GDSC1_GDSC2_IC_20191119.csv",
+  "model": "svm",
+  "cv": 3,
+  "params_grid": {
+    "C": [1e7, 1e6, 1e5, 1e4],
+    "gamma": [1e-10, 1e-9, 1e-8,1e-7]
+  },
+  "imputer": "KNN",
+  "seed": 42,
+  "work_dir": "/home/scai/SangerDrug/work_dirs/rna/SVM",
+  "min_cell_lines": 900,
+  "importance": false,
+  "data_type": "rna"
+}

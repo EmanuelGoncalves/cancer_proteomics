@@ -140,4 +140,7 @@ tables/*
 reports/eg/*.csv.gz
 reports/eg/*.hdf5
 reports/eg/lmm_gexp_crispr/
-reports/eg/lmm_protein_crispr/
+reports/eg/lmm_protein_crispr/**/*data*
+**/*results*
+**/.*
+**/*work_dir*

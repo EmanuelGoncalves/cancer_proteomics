@@ -1,0 +1,19 @@
+{
+  "meta_file": "/home/scai/SangerDrug/data/E0022_P01-P05_sample_map.txt",
+  "data_file": "/home/scai/SangerDrug/data/E0022_P05_protein_intensities.txt",
+  "ic50_file": "/home/scai/SangerDrug/data/DrugResponse_PANCANCER_GDSC1_GDSC2_IC_20191119.csv",
+  "model": "mlp",
+  "cv": 3,
+  "params_grid": {
+    "hidden_layer_sizes": [15, 20, 25, 30, 35, 40, 50],
+    "max_iter": [100, 150, 200, 250, 300, 350],
+    "activation": ["relu", "logistic", "tanh"],
+    "alpha": [1e-2, 1e-3, 1e-4, 1e-5]
+  },
+  "imputer": "KNN",
+  "seed": 42,
+  "work_dir": "/home/scai/SangerDrug/work_dirs/protein/MLP",
+  "min_cell_lines": 900,
+  "importance": false,
+  "data_type": "protein"
+}

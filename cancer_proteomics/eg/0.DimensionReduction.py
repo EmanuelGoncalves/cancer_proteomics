@@ -27,7 +27,6 @@ import pandas as pd
 import pkg_resources
 import seaborn as sns
 import matplotlib.pyplot as plt
-from eg import DPATH
 from natsort import natsorted
 from sklearn.manifold import TSNE
 from sklearn.decomposition import PCA
@@ -36,6 +35,7 @@ from crispy.DataImporter import Proteomics, GeneExpression, CRISPR, Sample
 
 
 LOG = logging.getLogger("Crispy")
+DPATH = pkg_resources.resource_filename("crispy", "data/")
 RPATH = pkg_resources.resource_filename("notebooks", "swath_proteomics/reports/")
 
 

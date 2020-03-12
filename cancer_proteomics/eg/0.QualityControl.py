@@ -24,11 +24,11 @@ import pkg_resources
 import seaborn as sns
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
-from eg import DPATH
 from crispy.CrispyPlot import CrispyPlot
 from crispy.DataImporter import Proteomics, Sample
 
 
+DPATH = pkg_resources.resource_filename("crispy", "data/")
 RPATH = pkg_resources.resource_filename("notebooks", "swath_proteomics/reports/")
 
 

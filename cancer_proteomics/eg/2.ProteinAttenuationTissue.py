@@ -26,7 +26,6 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from sklearn import svm
-from eg import DPATH
 from natsort import natsorted
 from sklearn.linear_model import PassiveAggressiveClassifier, LogisticRegressionCV
 from sklearn import metrics
@@ -47,7 +46,9 @@ from crispy.DataImporter import (
     Sample,
 )
 
+
 LOG = logging.getLogger("Crispy")
+DPATH = pkg_resources.resource_filename("crispy", "data/")
 RPATH = pkg_resources.resource_filename("notebooks", "swath_proteomics/reports/")
 
 

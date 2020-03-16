@@ -18,8 +18,16 @@
 # %load_ext autoreload
 # %autoreload 2
 
-import os
 import sys
+
+sys.path.extend(
+    [
+        "/Users/eg14/Projects/cancer_proteomics",
+        "/Users/eg14/Projects/cancer_proteomics/cancer_proteomics",
+    ]
+)
+
+import os
 import logging
 import argparse
 import pandas as pd
@@ -30,17 +38,8 @@ from cancer_proteomics.eg.LMModels import LMModels
 from crispy.DataImporter import Proteomics, GeneExpression, CRISPR
 
 
-sys.path.extend(
-    [
-        "/Users/eg14/Projects/crispy",
-        "/Users/eg14/Projects/crispy/crispy",
-        "/Users/eg14/Projects/crispy/notebooks",
-    ]
-)
-
 LOG = logging.getLogger("Crispy")
-DPATH = pkg_resources.resource_filename("crispy", "data/")
-RPATH = pkg_resources.resource_filename("notebooks", "swath_proteomics/reports/")
+RPATH = pkg_resources.resource_filename("reports", "eg/")
 
 
 if __name__ == "__main__":
@@ -66,7 +65,6 @@ if __name__ == "__main__":
     # Filter data-sets
     #
     prot = prot.filter(subset=samples, perc_measures=0.03)
-    prot = prot.T.fillna(prot.T.mean()).T
     LOG.info(f"Proteomics: {prot.shape}")
 
     gexp = gexp.filter(subset=samples)
@@ -85,18 +83,18 @@ if __name__ == "__main__":
 
         # Protein ~ CRISPR LMMs
         #
-        prot_lmm = LMModels(y=crispr.T[args.genes], x=prot.T[genes]).matrix_lmm()
+        prot_lmm = LMModels(y=prot.loc[args.genes, :].T, x=crispr.T).matrix_lmm()
         prot_lmm.to_csv(
-            f"{RPATH}/lmm_protein_crispr/{'_'.join(args.genes)}_fillna.csv.gz",
+            f"{RPATH}/lmm_protein_crispr/{'_'.join(args.genes)}.csv.gz",
             index=False,
             compression="gzip",
         )
 
         # Gene-expression ~ CRISPR LMMs
         #
-        gexp_lmm = LMModels(y=crispr.T[args.genes], x=gexp.T[genes]).matrix_lmm()
+        gexp_lmm = LMModels(y=gexp.loc[args.genes, :].T, x=crispr.T).matrix_lmm()
         gexp_lmm.to_csv(
-            f"{RPATH}/lmm_gexp_crispr/{'_'.join(args.genes)}_fillna.csv.gz",
+            f"{RPATH}/lmm_gexp_crispr/{'_'.join(args.genes)}.csv.gz",
             index=False,
             compression="gzip",
         )
@@ -108,7 +106,11 @@ if __name__ == "__main__":
         #
         ddir = f"{RPATH}/lmm_protein_crispr/"
         prot_table = pd.concat(
-            [pd.read_csv(f"{ddir}/{f}") for f in os.listdir(ddir) if f.endswith("_fillna.csv.gz")],
+            [
+                pd.read_csv(f"{ddir}/{f}")
+                for f in os.listdir(ddir)
+                if f.endswith(".csv.gz")
+            ],
             ignore_index=True,
             sort=False,
         ).sort_values("fdr")[LMModels.RES_ORDER]
@@ -120,7 +122,11 @@ if __name__ == "__main__":
         #
         ddir = f"{RPATH}/lmm_gexp_crispr/"
         gexp_table = pd.concat(
-            [pd.read_csv(f"{ddir}/{f}") for f in os.listdir(ddir) if f.endswith("_fillna.csv.gz")],
+            [
+                pd.read_csv(f"{ddir}/{f}")
+                for f in os.listdir(ddir)
+                if f.endswith(".csv.gz")
+            ],
             ignore_index=True,
             sort=False,
         )
@@ -135,8 +141,8 @@ if __name__ == "__main__":
             args = [iter(iterable)] * n
             return zip_longest(*args, fillvalue=fillvalue)
 
-        for args_genes in grouper(list(crispr.index), 30, None):
+        for args_genes in grouper(genes, 30, None):
             args_genes = [g for g in args_genes if g is not None]
             os.system(
-                f"python /Users/eg14/Projects/crispy/notebooks/swath_proteomics/1.SLinteractions.py --genes {' '.join(args_genes)}"
+                f"python /Users/eg14/Projects/cancer_proteomics/cancer_proteomics/eg/1.SLinteractions.py --genes {' '.join(args_genes)}"
             )

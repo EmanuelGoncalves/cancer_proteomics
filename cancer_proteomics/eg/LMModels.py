@@ -5,6 +5,7 @@ import logging
 import numpy as np
 import pandas as pd
 import pkg_resources
+from scipy.stats import spearmanr, chi2
 from statsmodels.stats.multitest import multipletests
 
 
@@ -15,7 +16,7 @@ DPATH = pkg_resources.resource_filename("crispy", "data/")
 class LMModels:
     """"
     Class to perform the linear regression models
-    """""
+    """ ""
 
     RES_ORDER = [
         "y_id",
@@ -68,7 +69,11 @@ class LMModels:
         # Samples overlap
         self.samples = list(
             set.intersection(
-                set(y.index), set(x.index), set(self.m.index), set(self.k.index), set(y.index) if m2 is None else set(m2.index)
+                set(y.index),
+                set(x.index),
+                set(self.m.index),
+                set(self.k.index),
+                set(y.index) if m2 is None else set(m2.index),
             )
         )
         LOG.info(f"Samples: {len(self.samples)}")
@@ -86,7 +91,9 @@ class LMModels:
         # Random effects matrix
         self.k = self.k.loc[self.samples, self.samples].values
 
-        LOG.info(f"Y: {self.y.shape[1]}; X: {self.x.shape[1]}; M: {self.m.shape[1]}; K: {self.k.shape[1]}")
+        LOG.info(
+            f"Y: {self.y.shape[1]}; X: {self.x.shape[1]}; M: {self.m.shape[1]}; K: {self.k.shape[1]}"
+        )
 
         # Second covariates matrix
         if m2 is not None:
@@ -130,15 +137,7 @@ class LMModels:
 
         return x_.values, np.array(list(x_.columns))
 
-    def lmm(self, y_var):
-        """
-        Linear regression method, using measurements of the y matrix for the variable specified by y_var.
-
-        :param y_var: String y variable name
-        :return: pandas.DataFrame of the associations
-        """
-        import limix
-
+    def __prepare_inputs__(self, y_var):
         # Define samples with NaNs
         y_idx = list(self.y_columns).index(y_var)
         y_nans_idx = np.isnan(self.y[:, y_idx])
@@ -175,13 +174,125 @@ class LMModels:
         m_ = m_[:, np.std(m_, axis=0) > 0]
 
         if (self.m2 is not None) and (self.m2_feature_type == "same_y"):
-            m_ = np.append(m_, self.m2[y_nans_idx == 0][:, self.m2_columns == y_var], axis=1)
+            m_ = np.append(
+                m_, self.m2[y_nans_idx == 0][:, self.m2_columns == y_var], axis=1
+            )
 
         if self.add_intercept:
             m_ = np.insert(m_, m_.shape[1], values=1, axis=1)
 
         # Subset random effects matrix
         k_ = self.k[:, y_nans_idx == 0][y_nans_idx == 0, :]
+
+        return y_, y_nans_idx, x_, x_vars, m_, k_
+
+    @staticmethod
+    def log_likelihood(y_true, y_pred):
+        n = len(y_true)
+        ssr = np.power(y_true - y_pred, 2).sum()
+        var = ssr / n
+
+        l = np.longfloat(1 / (np.sqrt(2 * np.pi * var))) ** n * np.exp(
+            -(np.power(y_true - y_pred, 2) / (2 * var)).sum()
+        )
+        ln_l = np.log(l)
+
+        return float(ln_l)
+
+    def rfr(self, y_var, top_n_features=10, max_features=None):
+        """
+        Non-linear regression with RandomForestRegression, using measurements of the y matrix for the variable
+        specified by y_var.
+
+        :param y_var: String y variable name
+        :param n_estimators:
+        :param max_features:
+        :return: pandas.DataFrame of the associations
+        """
+        from sklearn.ensemble import RandomForestRegressor
+        from sklearn.inspection import permutation_importance
+        from sklearn.model_selection import ShuffleSplit, GridSearchCV
+
+        # Assemble matrices
+        y_, y_nans_idx, x_, x_vars, m_, k_ = self.__prepare_inputs__(y_var)
+
+        # Rank features based on Spearman R
+        feature_rank = [spearmanr(y_, i) for i in x_.T]
+        feature_rank_idx = sorted(
+            range(len(feature_rank)),
+            key=lambda k: abs(feature_rank[k][0]),
+            reverse=True,
+        )
+
+        # Pick top features
+        x_new_ = x_[:, feature_rank_idx[:top_n_features]]
+
+        # Full model: top features + covariates + [random effects]
+        x_new_full_ = np.concatenate((m_, x_new_), axis=1)
+
+        param_grid = {
+            "n_estimators": [50, 100, 200, 300],
+            "max_depth": [3, 5, 10, 15],
+        }
+
+        rf_full = GridSearchCV(
+            RandomForestRegressor(max_features=max_features, min_samples_leaf=5), param_grid, cv=ShuffleSplit(test_size=.2, n_splits=10)
+        )
+        rf_full = rf_full.fit(x_new_full_, y_[:, 0])
+        LOG.info(rf_full.best_params_)
+
+        pr_res = permutation_importance(rf_full.best_estimator_, x_new_full_, y_[:, 0], n_repeats=10)
+
+        rf_full_ll = self.log_likelihood(y_[:, 0], rf_full.best_estimator_.predict(x_new_full_))
+
+        # Model per feature
+        features_lr, features_pval = [], []
+        for f_idx in range(top_n_features):
+            x_new_fsmall = np.concatenate((m_, np.delete(x_new_, f_idx, 1)), axis=1)
+
+            rf_fsmall = RandomForestRegressor(
+                max_features=max_features,
+                n_estimators=rf_full.best_params_["n_estimators"],
+                max_depth=rf_full.best_params_["max_depth"],
+            ).fit(x_new_fsmall, y_[:, 0])
+
+            rf_fsmall_ll = self.log_likelihood(
+                y_[:, 0], rf_fsmall.predict(x_new_fsmall)
+            )
+
+            lr = 2 * (rf_full_ll - rf_fsmall_ll)
+            lr_pval = chi2.sf(float(lr), 1)
+
+            features_lr.append(lr)
+            features_pval.append(lr_pval)
+
+        res = pd.DataFrame(
+            dict(
+                y_id=y_var,
+                x_id=x_vars[feature_rank_idx[:top_n_features]],
+                feature_importance=rf_full.best_estimator_.feature_importances_[-top_n_features:],
+                logratio=features_lr,
+                logratio_pval=features_pval,
+                speraman_r=[feature_rank[i][0] for i in feature_rank_idx[:top_n_features]],
+                speraman_p=[feature_rank[i][1] for i in feature_rank_idx[:top_n_features]],
+                nsamples=sum(1 - y_nans_idx),
+                ncovariates=m_.shape[1],
+            )
+        ).sort_values("feature_importance", ascending=False)
+        print(res)
+
+        return res
+
+    def lmm(self, y_var):
+        """
+        Linear regression method, using measurements of the y matrix for the variable specified by y_var.
+
+        :param y_var: String y variable name
+        :return: pandas.DataFrame of the associations
+        """
+        import limix
+
+        y_, y_nans_idx, x_, x_vars, m_, k_ = self.__prepare_inputs__(y_var)
 
         # Linear Mixed Model
         lmm = limix.qtl.scan(G=x_, Y=y_, K=k_, M=m_, lik=self.lik, verbose=False)
@@ -246,6 +357,7 @@ class LMModels:
     def transform_matrix(matrix, t_type="scale"):
         if t_type == "scale":
             from sklearn.preprocessing import StandardScaler
+
             matrix = pd.DataFrame(
                 StandardScaler().fit_transform(matrix),
                 index=matrix.index,

@@ -41,8 +41,7 @@ from crispy.DataImporter import (
 
 
 LOG = logging.getLogger("Crispy")
-DPATH = pkg_resources.resource_filename("crispy", "data/")
-RPATH = pkg_resources.resource_filename("notebooks", "swath_proteomics/reports/")
+RPATH = pkg_resources.resource_filename("reports", "eg/")
 
 
 def nan_spearman(x, y):
@@ -133,7 +132,7 @@ mofa = MOFA(
     iterations=2500,
     covariates=covariates,
     convergence_mode="fast",
-    factors_n=200,
+    factors_n=10,
 )
 
 mofa.save_hdf5(f"{RPATH}/2.MultiOmicsCovs.hdf5")

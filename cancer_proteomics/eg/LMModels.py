@@ -5,12 +5,16 @@ import logging
 import numpy as np
 import pandas as pd
 import pkg_resources
+import seaborn as sns
+import matplotlib.pyplot as plt
+from crispy.GIPlot import GIPlot
+from crispy.Utils import Utils
 from scipy.stats import spearmanr, chi2
 from statsmodels.stats.multitest import multipletests
 
 
 LOG = logging.getLogger("Crispy")
-DPATH = pkg_resources.resource_filename("crispy", "data/")
+RPATH = pkg_resources.resource_filename("reports", "eg/")
 
 
 class LMModels:
@@ -199,7 +203,7 @@ class LMModels:
 
         return float(ln_l)
 
-    def rfr(self, y_var, top_n_features=10, max_features=None):
+    def rfr(self, y_var, top_n_features=10):
         """
         Non-linear regression with RandomForestRegression, using measurements of the y matrix for the variable
         specified by y_var.
@@ -230,58 +234,97 @@ class LMModels:
         # Full model: top features + covariates + [random effects]
         x_new_full_ = np.concatenate((m_, x_new_), axis=1)
 
-        param_grid = {
-            "n_estimators": [50, 100, 200, 300],
-            "max_depth": [3, 5, 10, 15],
-        }
+        features_pr = []
+        cv = ShuffleSplit(test_size=0.3, n_splits=10)
+        for idx_train, idx_test in cv.split(x_new_full_, y_[:, 0]):
+            idx_rf = RandomForestRegressor(n_estimators=100, min_samples_split=5, max_depth=5, max_features=None)
+            idx_rf = idx_rf.fit(x_new_full_[idx_train], y_[idx_train, 0])
 
-        rf_full = GridSearchCV(
-            RandomForestRegressor(max_features=max_features, min_samples_leaf=5), param_grid, cv=ShuffleSplit(test_size=.2, n_splits=10)
-        )
-        rf_full = rf_full.fit(x_new_full_, y_[:, 0])
-        LOG.info(rf_full.best_params_)
+            train_r2 = idx_rf.score(x_new_full_[idx_train], y_[idx_train, 0])
+            test_r2 = idx_rf.score(x_new_full_[idx_test], y_[idx_test, 0])
+            LOG.info(f"R2: train={train_r2:.2f}; test={test_r2:.2f}")
 
-        pr_res = permutation_importance(rf_full.best_estimator_, x_new_full_, y_[:, 0], n_repeats=10)
-
-        rf_full_ll = self.log_likelihood(y_[:, 0], rf_full.best_estimator_.predict(x_new_full_))
-
-        # Model per feature
-        features_lr, features_pval = [], []
-        for f_idx in range(top_n_features):
-            x_new_fsmall = np.concatenate((m_, np.delete(x_new_, f_idx, 1)), axis=1)
-
-            rf_fsmall = RandomForestRegressor(
-                max_features=max_features,
-                n_estimators=rf_full.best_params_["n_estimators"],
-                max_depth=rf_full.best_params_["max_depth"],
-            ).fit(x_new_fsmall, y_[:, 0])
-
-            rf_fsmall_ll = self.log_likelihood(
-                y_[:, 0], rf_fsmall.predict(x_new_fsmall)
-            )
-
-            lr = 2 * (rf_full_ll - rf_fsmall_ll)
-            lr_pval = chi2.sf(float(lr), 1)
-
-            features_lr.append(lr)
-            features_pval.append(lr_pval)
+            idx_rf = permutation_importance(idx_rf, x_new_full_[idx_test], y_[idx_test, 0])
+            idx_pr_mean = idx_rf.importances_mean[-top_n_features:]
+            features_pr.append(idx_pr_mean)
 
         res = pd.DataFrame(
             dict(
                 y_id=y_var,
                 x_id=x_vars[feature_rank_idx[:top_n_features]],
-                feature_importance=rf_full.best_estimator_.feature_importances_[-top_n_features:],
-                logratio=features_lr,
-                logratio_pval=features_pval,
-                speraman_r=[feature_rank[i][0] for i in feature_rank_idx[:top_n_features]],
-                speraman_p=[feature_rank[i][1] for i in feature_rank_idx[:top_n_features]],
+                permutation_importance=np.median(features_pr, axis=0),
                 nsamples=sum(1 - y_nans_idx),
                 ncovariates=m_.shape[1],
             )
-        ).sort_values("feature_importance", ascending=False)
+        ).sort_values("permutation_importance", ascending=False)
         print(res)
 
         return res
+
+    def svm(self, y_var):
+        from sklearn.svm import SVR
+        from sklearn.model_selection import ShuffleSplit, GridSearchCV
+
+        # Assemble matrices
+        y_, y_nans_idx, x_, x_vars, m_, k_ = self.__prepare_inputs__(y_var)
+
+        r2_train, r2_test = [], []
+        for f_idx in range(x_.shape[1]):
+            f_r2_train, f_r2_test = [], []
+
+            cv = ShuffleSplit(test_size=0.3, n_splits=10)
+            for f_train, f_test in cv.split(x_, y_[:, 0]):
+                f_svr = SVR(kernel='rbf', C=100, gamma=0.1, epsilon=.1)
+                f_svr = f_svr.fit(x_[f_train][:, [f_idx]], y_[f_train, 0])
+
+                cv_r2_train = f_svr.score(x_[f_train][:, [f_idx]], y_[f_train, 0])
+                cv_r2_test = f_svr.score(x_[f_test][:, [f_idx]], y_[f_test, 0])
+
+                f_r2_train.append(cv_r2_train)
+                f_r2_test.append(cv_r2_test)
+
+            f_r2_train, f_r2_test = np.median(f_r2_train), np.median(f_r2_test)
+            LOG.info(f"R2: train={f_r2_train:.2f}; test={f_r2_test:.2f}")
+
+            r2_train.append(f_r2_train)
+            r2_test.append(f_r2_test)
+
+        res = pd.DataFrame(
+            dict(
+                y_id=y_var,
+                x_id=x_vars,
+                r2_test=r2_test,
+                r2_train=r2_train,
+                nsamples=sum(1 - y_nans_idx),
+                ncovariates=m_.shape[1],
+            )
+        ).sort_values("r2_test", ascending=False)
+        print(res.head(60))
+
+        x_idx = 343
+        plot_df = pd.DataFrame(dict(
+            y=y_[:, 0],
+            x=x_[:, x_idx],
+        ))
+
+        param_grid = dict(
+            kernel=["rbf", "poly"],
+            degree=[1, 2, 3],
+            C=[5, 10, 100],
+            epsilon=[.1, .5, 1],
+        )
+        rgr = GridSearchCV(SVR(), param_grid, cv=ShuffleSplit(test_size=0.3, n_splits=10))
+        rgr = rgr.fit(plot_df[["x"]], plot_df["y"])
+        LOG.info(rgr.best_params_)
+        LOG.info(rgr.best_score_)
+
+        grid = GIPlot.gi_regression("x", "y", plot_df, plot_reg=False)
+        plot_df = plot_df.sort_values("x")
+        grid.ax_joint.plot(plot_df["x"], rgr.best_estimator_.predict(plot_df[["x"]]), color=GIPlot.PAL_DTRACE[1], lw=2)
+        plt.savefig(
+            f"{RPATH}/1.SVM_SL_test_regression.pdf", bbox_inches="tight", transparent=True
+        )
+        plt.close("all")
 
     def lmm(self, y_var):
         """

@@ -127,7 +127,7 @@ self = LMModels(y=prot.loc[["RPL22L1"], :].T, x=crispr.T)
 
 mobem = Mobem().filter()
 
-y_id, x_id = "RPL22L1", "WRN"
+y_id, x_id = "RPL22L1", "RPL36"
 
 plot_df = pd.concat(
     [

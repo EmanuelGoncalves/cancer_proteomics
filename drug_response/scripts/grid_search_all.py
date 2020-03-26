@@ -3,17 +3,16 @@ python grid_search_all.py configs/protein/mlp_grid_search.json
 """
 import pandas as pd
 import numpy as np
+import pickle
 from functools import reduce
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
-from xgboost import XGBRegressor
+from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error, roc_auc_score
 from sklearn.impute import SimpleImputer, KNNImputer
-from sklearn.ensemble import RandomForestRegressor
-from lightgbm import LGBMRegressor
+from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
 from sklearn.model_selection import KFold
-from sklearn.svm import SVR, NuSVR
+from sklearn.svm import SVR, SVC
 from sklearn.model_selection import GridSearchCV
-from sklearn.neural_network import MLPRegressor
+from sklearn.neural_network import MLPRegressor, MLPClassifier
 from sklearn.linear_model import ElasticNet
 import logging
 import sys
@@ -21,6 +20,7 @@ import json
 import os
 from datetime import datetime
 from tqdm import tqdm
+from scipy.stats import pearsonr
 
 STAMP = datetime.today().strftime('%Y%m%d%H%M')
 
@@ -56,12 +56,19 @@ cv = KFold(n_splits=configs['cv'], shuffle=True, random_state=seed)
 logger.info(f"Running GridSearchCV for {configs['model']} with {configs['cv']}-fold CV and seed {seed}")
 
 # %%
-model_dict = {'rf': RandomForestRegressor(),
-              'svm': SVR(),
-              'en': ElasticNet(),
-              'svm-linear': SVR(kernel='linear'),
-              'mlp': MLPRegressor(),
-              'lgbm': LGBMRegressor()}
+if configs['task'].lower() == 'classification':
+    model_dict = {'rf': RandomForestClassifier(),
+                  'svm': SVC(),
+                  'en': ElasticNet(),
+                  'svm-linear': SVC(kernel='linear'),
+                  'mlp': MLPClassifier()}
+
+else:
+    model_dict = {'rf': RandomForestRegressor(),
+                  'svm': SVR(),
+                  'en': ElasticNet(),
+                  'svm-linear': SVR(kernel='linear'),
+                  'mlp': MLPRegressor()}
 
 # %% data loading
 meta = pd.read_csv(meta_file, sep='\t')
@@ -81,62 +88,85 @@ elif data_type.lower() == 'rna':
     data_raw = data_raw.reset_index()
     data_sample = pd.merge(data_raw, meta[['SIDM', 'Cell_line']].drop_duplicates()).drop(['SIDM'],
                                                                                          axis=1)
+elif data_type.lower() == 'peptide':
+    data_raw = pickle.load(open(data_file, 'rb'))
+    data_raw_merge = pd.merge(data_raw, meta[['Automatic_MS_filename', 'Cell_line']])
+    data_sample = data_raw_merge.drop(['Automatic_MS_filename'],
+                                      axis=1).groupby(['Cell_line']).agg(np.nanmean).reset_index()
+elif data_type.lower() in ('cancer_type', 'tissue_type'):
+    data_sample = pd.read_csv(data_file)
+    data_raw = data_sample
+elif data_type.lower() in ('ccle_common', 'sanger_common'):
+    data_sample = pd.read_csv(data_file, sep='\t')
+    data_raw = data_sample
 else:
     logger.error("Protein or RNA? Data type not supported.")
     raise Exception('data_type not supported')
 
-# shuffle so that we randomly pick data version
-ic50_shuffle = ic50.sample(frac=1, random_state=seed).reset_index(drop=True).drop_duplicates(
-    ['Drug Id', 'Cell line name'])
+logger.info(f"data matrix shape: {data_sample.shape}")
 
-# filtering
+# %% shuffle so that we randomly pick data version
+ic50 = ic50.sort_values(by=['Dataset version'])
+ic50 = ic50.drop_duplicates(
+    ['Drug Id', 'Cell line name'], keep='last').sort_values(
+    by=['Drug Id', 'Cell line name']).reset_index(drop=True)
+
+# %% filtering
 min_cell_lines = configs['min_cell_lines']
-ic50_shuffle_counts = ic50_shuffle.groupby(['Drug Id']).size()
-selected_drugs = ic50_shuffle_counts[ic50_shuffle_counts > min_cell_lines].index.values
+ic50_counts = ic50.groupby(['Drug Id']).size()
+selected_drugs = ic50_counts[ic50_counts > min_cell_lines].index.values
 
 # selected_drugs = selected_drugs[:2]
 
-ic50_shuffle_selected = ic50_shuffle[ic50_shuffle['Drug Id'].isin(selected_drugs)]
+ic50_selected = ic50[ic50['Drug Id'].isin(selected_drugs)]
 logger.info(f"Filtered drugs with more than {min_cell_lines} cell lines.")
-logger.info(f"Fitting {ic50_shuffle_selected['Drug Id'].unique().size} models(drugs).")
+logger.info(f"Fitting {ic50_selected['Drug Id'].unique().size} models(drugs).")
 
-cell_lines_train, cell_lines_test = train_test_split(sorted(ic50_shuffle_selected['Cell line name'].unique()),
+cell_lines_train, cell_lines_test = train_test_split(sorted(data_sample['Cell_line'].unique()),
                                                      test_size=0.2,
                                                      random_state=seed)
 
-ic50_shuffle_selected_train = ic50_shuffle_selected[ic50_shuffle_selected['Cell line name'].isin(cell_lines_train)]
-ic50_shuffle_selected_test = ic50_shuffle_selected[ic50_shuffle_selected['Cell line name'].isin(cell_lines_test)]
+ic50_selected_train = ic50_selected[ic50_selected['Cell line name'].isin(cell_lines_train)]
+ic50_selected_test = ic50_selected[ic50_selected['Cell line name'].isin(cell_lines_test)]
 
-logger.info(f"Training cell lines: {sorted(cell_lines_train)}")
-logger.info(f"Testing cell lines: {sorted(cell_lines_test)}")
+logger.info(f"{len(cell_lines_train)} Training cell lines: {sorted(cell_lines_train)}")
+logger.info(f"{len(cell_lines_test)} Testing cell lines: {sorted(cell_lines_test)}")
 
 # %% training
 feature_df_list = []
 score_df_list = []
 params_df_list = []
-for drug_id in tqdm(ic50_shuffle_selected_train['Drug Id'].unique()):
+for drug_id in tqdm(ic50_selected_train['Drug Id'].unique()):
     logger.info(f"Running GridSearchCV for Drug Id={drug_id}")
+
+    target = 'rel_sensitive' if configs['task'].lower() == 'classification' else 'IC50'
+    if 'target' in configs:
+        target = configs['target']
+
     tmp_df_train = pd.merge(
         data_sample,
-        ic50_shuffle_selected_train[ic50_shuffle_selected_train['Drug Id'] == drug_id][['Cell line name', 'IC50']],
+        ic50_selected_train[ic50_selected_train['Drug Id'] == drug_id][['Cell line name', target]],
         how='inner',
         left_on='Cell_line',
         right_on='Cell line name')
-    X_train = tmp_df_train.drop(['Cell_line', 'Cell line name', 'IC50'], axis=1)
-    y_train = tmp_df_train['IC50']
 
     tmp_df_test = pd.merge(
         data_sample,
-        ic50_shuffle_selected_test[ic50_shuffle_selected_test['Drug Id'] == drug_id][['Cell line name', 'IC50']],
+        ic50_selected_test[ic50_selected_test['Drug Id'] == drug_id][['Cell line name', target]],
         how='inner',
         left_on='Cell_line',
         right_on='Cell line name')
-    X_test = tmp_df_test.drop(['Cell_line', 'Cell line name', 'IC50'], axis=1)
-    y_test = tmp_df_test['IC50']
+
+    X_train = tmp_df_train.drop(['Cell_line', 'Cell line name', target], axis=1)
+    X_test = tmp_df_test.drop(['Cell_line', 'Cell line name', target], axis=1)
+
+    y_train = tmp_df_train[target]
+    y_test = tmp_df_test[target]
 
     reg = model_dict[configs['model']]
     param_grid = configs['params_grid']
 
+    # impute NA
     imputer = None
     if configs['imputer'] == 'mean':
         imputer = SimpleImputer(missing_values=np.nan, strategy='mean')
@@ -145,7 +175,8 @@ for drug_id in tqdm(ic50_shuffle_selected_train['Drug Id'].unique()):
     else:
         logger.warning("No imputer selected!")
 
-    rcv = GridSearchCV(reg, param_grid, n_jobs=-1, cv=cv, scoring='neg_mean_absolute_error', refit=True)
+    # run grid search
+    rcv = GridSearchCV(reg, param_grid, n_jobs=-1, cv=cv, scoring=configs['metric'], refit=True)
     if configs['imputer'].lower() == 'none':
         rcv.fit(X_train, y_train)
         y_pred = rcv.best_estimator_.predict(X_test)
@@ -153,16 +184,37 @@ for drug_id in tqdm(ic50_shuffle_selected_train['Drug Id'].unique()):
         rcv.fit(imputer.fit_transform(X_train), y_train)
         y_pred = rcv.best_estimator_.predict(imputer.transform(X_test))
 
-    test_mae = mean_absolute_error(y_test, y_pred)
-    score_df_list.append(
-        pd.DataFrame({'Drug Id': [drug_id], 'val_mae': [-1 * rcv.best_score_], 'test_mae': [test_mae]}))
+    # gather results
+    if 'sign' in configs:
+        sign = configs['sign']
+    else:
+        sign = -1 if configs['task'] == 'regression' else 1
+
+    if configs['task'].lower() == 'classification':
+        test_auc = roc_auc_score(y_test, y_pred)
+        score_dict = {'Drug Id': drug_id, 'val_mae': sign * rcv.best_score_, 'test_score': test_auc}
+    else:
+        test_mae = mean_absolute_error(y_test, y_pred)
+        test_rmse = mean_squared_error(y_test, y_pred, squared=False)
+        test_r2 = r2_score(y_test, y_pred)
+        test_corr = pearsonr(y_test, y_pred)[0]
+        score_dict = {'Drug Id': drug_id, 'val_score': sign * rcv.best_score_,
+                              'test_mae': test_mae, 'test_rmse': test_rmse,
+                              'test_r2': test_r2, 'test_corr': test_corr}
+
+    for i in range(configs['cv']):
+        score_dict[f"cv{i}_{configs['metric']}"] = sign * rcv.cv_results_[f'split{i}_test_score'][rcv.best_index_]
+    score_df_list.append(score_dict)
+
+    # record best params
     params = rcv.best_params_
     params['Drug Id'] = drug_id
     params_df_list.append(params)
 
+    # record feature importance if possible
     importances = None
     if configs["importance"]:
-        if configs['model'] == 'rf':
+        if configs['model'] in ('rf', 'lgbm'):
             importances = rcv.best_estimator_.feature_importances_
         elif configs['model'] in ('svm-linear'):
             importances = rcv.best_estimator_.coef_[0]
@@ -174,10 +226,10 @@ for drug_id in tqdm(ic50_shuffle_selected_train['Drug Id'].unique()):
         feature_df_list.append(
             pd.DataFrame({'protein': X_train.columns, f'importance_{drug_id}': importances}))
 
-    logger.info(f"Finished Drug Id={drug_id}\t{-1 * rcv.best_score_}\t{rcv.best_params_}")
+    logger.info(f"Finished Drug Id={drug_id}\t{configs['sign'] * rcv.best_score_}\t{rcv.best_params_}")
 
 # %% output
-score_df = pd.concat(score_df_list)
+score_df = pd.DataFrame(score_df_list)
 score_df.to_csv(f"{configs['work_dir']}/scores_{STAMP}.csv", index=False)
 params_df = pd.DataFrame(params_df_list)
 params_df.to_csv(f"{configs['work_dir']}/best_params_{STAMP}.csv", index=False)

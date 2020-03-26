@@ -3,7 +3,7 @@
   "data_file": "/home/scai/SangerDrug/data/E0022_P05_protein_intensities.txt",
   "ic50_file": "/home/scai/SangerDrug/data/DrugResponse_PANCANCER_GDSC1_GDSC2_IC_20191119.csv",
   "model": "rf",
-  "cv": 3,
+  "cv": 5,
   "params_grid": {
     "criterion": ["mse", "mae"],
     "n_estimators": [400, 600, 800, 1000],
@@ -17,5 +17,7 @@
   "work_dir": "/home/scai/SangerDrug/work_dirs/protein/RandomForest",
   "min_cell_lines": 900,
   "importance": true,
-  "data_type": "protein"
+  "data_type": "protein",
+  "task": "regression",
+  "metric": "neg_mean_absolute_error"
 }

@@ -1,9 +1,9 @@
 {
-  "meta_file": "/home/scai/SangerDrug/data/E0022_P01-P05_sample_map.txt",
-  "data_file": "/home/scai/SangerDrug/data/E0022_P05_protein_intensities.txt",
-  "ic50_file": "/home/scai/SangerDrug/data/DrugResponse_PANCANCER_GDSC1_GDSC2_IC_20191119.csv",
+  "meta_file": "/home/scai/SangerDrug/data/E0022_P06_final_sample_map.txt",
+  "data_file": "/home/scai/SangerDrug/data/protein/E0022_P06_log_transformed.tsv",
+  "ic50_file": "/home/scai/SangerDrug/data/drug/DrugResponse_PANCANCER_GDSC1_GDSC2_IC_20191119.csv",
   "model": "svm",
-  "cv": 10,
+  "cv": 5,
   "params_grid": {
     "C": [1e6, 1e5, 1e4, 1e3],
     "gamma": [1e-10, 1e-9, 1e-8,1e-7]
@@ -13,5 +13,8 @@
   "work_dir": "/home/scai/SangerDrug/work_dirs/protein/SVM",
   "min_cell_lines": 900,
   "importance": false,
-  "data_type": "protein"
+  "data_type": "protein",
+  "task": "regression",
+  "metric": "r2",
+  "sign": 1
 }

@@ -3,7 +3,7 @@
   "data_file": "/home/scai/SangerDrug/data/E0022_P05_protein_intensities.txt",
   "ic50_file": "/home/scai/SangerDrug/data/DrugResponse_PANCANCER_GDSC1_GDSC2_IC_20191119.csv",
   "model": "svm-linear",
-  "cv": 3,
+  "cv": 5,
   "params_grid": {
     "C": [1e9, 1e8, 1e7, 1e6]
   },
@@ -12,5 +12,6 @@
   "work_dir": "/home/scai/SangerDrug/work_dirs/protein/SVM-linear",
   "min_cell_lines": 900,
   "importance": true,
-  "data_type": "protein"
+  "data_type": "protein",
+  "task": "regression"
 }

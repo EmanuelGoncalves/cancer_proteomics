@@ -38,8 +38,9 @@ import pandas as pd
 import pkg_resources
 import seaborn as sns
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 from scipy.stats import spearmanr, chi2
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 from scipy.cluster import hierarchy
 from natsort import natsorted
 from crispy.GIPlot import GIPlot
@@ -54,7 +55,7 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.inspection import permutation_importance
 from sklearn.linear_model import LinearRegression, ElasticNet
 from sklearn.model_selection import ShuffleSplit, GridSearchCV, KFold
-from crispy.DataImporter import Proteomics, GeneExpression, CRISPR, Sample, Mobem, PPI
+from crispy.DataImporter import Proteomics, GeneExpression, CRISPR, Sample, Mobem, PPI, DPATH
 
 
 LOG = logging.getLogger("Crispy")
@@ -149,7 +150,7 @@ class PredModels:
     def define_covariates(
         std_filter=True,
         medium=True,
-        cancertype=True,
+        tissue=True,
         mburden=True,
         ploidy=True,
         institute=True,
@@ -172,9 +173,9 @@ class PredModels:
             covariates.append(culture)
 
         # Cancer type
-        if cancertype:
-            ctype = pd.get_dummies(samplesheet["cancer_type"])
-            covariates.append(ctype)
+        if tissue:
+            ttype = pd.get_dummies(samplesheet["tissue"])
+            covariates.append(ttype)
 
         # Mutation burden
         if mburden:
@@ -205,22 +206,113 @@ class PredModels:
     @staticmethod
     def get_predictor(predictor_type):
         if predictor_type == "SVM":
-            predictor = SVR(kernel="rbf", C=1, epsilon=0.1)
+            predictor = SVR(kernel="rbf", epsilon=0.1, C=1, gamma=0.01)
 
         elif predictor_type == "RF":
             predictor = RandomForestRegressor(
-                n_estimators=100, min_samples_split=5, max_depth=5, max_features=None
+                max_features=None, max_depth=30, n_estimators=200
             )
 
         elif predictor_type == "EN":
-            predictor = ElasticNet(fit_intercept=True, alpha=0.1)
+            predictor = ElasticNet(fit_intercept=True, normalize=False, alpha=0.2, l1_ratio=0.1)
 
         else:
             assert False, f"Predictor type {predictor_type} not supported"
 
         return predictor
 
-    def train(self, y_id, features_percentile, cv, ):
+    def hyperparams_optimisation(
+        self, predictor_type, features_percentile=0.99, cv=KFold(n_splits=10), n_proteins=30
+    ):
+        # Import top predicted proteins
+        top_proteins = list(
+            pd.read_csv(f"{RPATH}/top_predicted_proteins_crispr.txt", header=None)[0]
+        )[:n_proteins]
+
+        # Build predictor
+        if predictor_type == "SVM":
+            predictor_params = dict(C=[1e0, 1e1, 1e2, 1e3], gamma=np.logspace(-2, 2, 5))
+            predictor = SVR(kernel="rbf")
+
+        elif predictor_type == "RF":
+            predictor_params = dict(
+                max_depth=[10, 20, 30, None],
+                n_estimators=[100, 150, 200],
+            )
+            predictor = RandomForestRegressor(max_features=None, max_depth=None)
+
+        elif predictor_type == "EN":
+            predictor_params = dict(
+                alpha=[.1, .2, .3, .4, .5, .6, .7, .8, .9],
+                l1_ratio=[.1, .5, .7, .9, .95, .99, 1],
+            )
+            predictor = ElasticNet(fit_intercept=True)
+
+        else:
+            assert False, f"Predictor type {predictor_type} not supported"
+
+        # Run Grid Search
+        gs_cvs = []
+        for p in top_proteins:
+            LOG.info(f"{predictor_type} GridSearch: {p}")
+            # Assemble matrices
+            X, y = self.prepare_inputs(p)
+
+            # Feature selection
+            f_selected = self.feature_selection_top_spearman(
+                X, y, q=features_percentile
+            )
+            X = X[f_selected.index]
+
+            predictor_gs = GridSearchCV(predictor, param_grid=predictor_params, cv=cv)
+            predictor_gs = predictor_gs.fit(X, y)
+
+            # GridSearch CV results
+            gs_res = pd.DataFrame(predictor_gs.cv_results_).assign(y_id=p)
+            gs_cvs.append(gs_res)
+        gs_cvs = pd.concat(gs_cvs, ignore_index=True)
+        gs_cvs = gs_cvs.assign(
+            params_string=gs_cvs["params"].apply(
+                lambda d: "; ".join([f"{k}={v}" for k, v in d.items()])
+            )
+        )
+
+        # Plot
+        order = gs_cvs.groupby("params_string")["mean_test_score"].median().sort_values(ascending=False)
+
+        _, ax = plt.subplots(1, 1, figsize=(2, 0.15 * len(order)), dpi=600)
+
+        sns.boxplot(
+            "mean_test_score",
+            "params_string",
+            data=gs_cvs,
+            orient="h",
+            notch=True,
+            order=list(order.index),
+            color=GIPlot.PAL_DTRACE[0],
+            boxprops=dict(linewidth=0.3),
+            whiskerprops=dict(linewidth=0.3),
+            medianprops=GIPlot.MEDIANPROPS,
+            flierprops=GIPlot.FLIERPROPS,
+            showcaps=False,
+            saturation=1.0,
+            ax=ax,
+        )
+
+        ax.set_xlabel(f"Mean R-squared")
+        ax.set_ylabel(f"Hyperparameters")
+        ax.set_title(f"{predictor_type} - Top {n_proteins} proteins")
+        ax.grid(True, axis="x", ls="-", lw=0.1, alpha=1.0, zorder=0)
+
+        plt.savefig(
+            f"{RPATH}/GridSearch_{predictor_type}.pdf", bbox_inches="tight", transparent=True
+        )
+        plt.close("all")
+
+        # Export
+        gs_cvs.to_csv(f"{RPATH}/GridSearch_{predictor_type}.csv.gz", compression="gzip", index=False)
+
+    def train(self, y_id, features_percentile, cv):
         # Assemble matrices
         X, y = self.prepare_inputs(y_id)
 
@@ -298,7 +390,7 @@ class PredModels:
             x_ids = list(X)
 
         # Covariates
-        m = self.define_covariates(cancertype=False).reindex(y.index).dropna()
+        m = self.define_covariates().reindex(y.index).dropna()
 
         # Align matrices
         X, y = X.loc[m.index], y[m.index]
@@ -318,11 +410,7 @@ class PredModels:
             lr_pval = chi2(1).sf(lr)
 
             x_var_res = dict(
-                y_id=y_id,
-                x_coef=lm_f.coef_[-1],
-                x_id=x_id,
-                x_lr=lr,
-                x_pval=lr_pval,
+                y_id=y_id, x_coef=lm_f.coef_[-1], x_id=x_id, x_lr=lr, x_pval=lr_pval, x_ncovs=m.shape[1]
             )
             res.append(x_var_res)
 
@@ -349,8 +437,16 @@ class PredModels:
         res = pd.concat(res, ignore_index=True)
 
         # Annotate individual features
-        res_annot = pd.concat([self.feature_importance(g, x_ids=set(df["x_id"])) for g, df in res.groupby("y_id")])
-        res = pd.concat([res.set_index(["y_id", "x_id"]), res_annot.set_index(["y_id", "x_id"])], axis=1).reset_index()
+        res_annot = pd.concat(
+            [
+                self.feature_importance(g, x_ids=set(df["x_id"]))
+                for g, df in res.groupby("y_id")
+            ]
+        )
+        res = pd.concat(
+            [res.set_index(["y_id", "x_id"]), res_annot.set_index(["y_id", "x_id"])],
+            axis=1,
+        ).reset_index()
 
         return res
 
@@ -382,11 +478,15 @@ if __name__ == "__main__":
     #
     pmodels = PredModels(prot.T, crispr.T)
 
-    gi = pmodels.train_matrix(
-        features_percentile=0.99, cv=KFold(n_splits=10)
-    )
+    gi = pmodels.train_matrix(features_percentile=0.99, cv=KFold(n_splits=10))
     gi.to_csv(f"{RPATH}/pred_models.csv.gz", index=False, compression="gzip")
     # gi = pd.read_csv(f"{RPATH}/pred_models.csv.gz")
+
+    # Remove poorly predcited outliers
+    #
+
+    y_id_rsquared_mean = gi.groupby("y_id")[[f"rsquared_{p}" for p in pmodels.PREDICTORS]].mean().mean(1)
+    gi = gi[~gi["y_id"].isin(y_id_rsquared_mean[y_id_rsquared_mean < 0].index)]
 
     #
     #
@@ -474,16 +574,6 @@ if __name__ == "__main__":
         lw=0.1,
         color=GIPlot.PAL_DTRACE[2],
     )
-    sns.regplot(
-        "mean_rsquared",
-        "std_rsquared",
-        data=plot_df,
-        lowess=True,
-        truncate=True,
-        scatter=False,
-        line_kws=dict(lw=1.0, color=GIPlot.PAL_DTRACE[1]),
-        ax=ax,
-    )
     plt.legend(
         *g.legend_elements(
             "sizes",
@@ -506,14 +596,167 @@ if __name__ == "__main__":
 
     #
     #
-    plot_df = gi[[f"rsquared_{p}" for p in pmodels.PREDICTORS]]
-    gi_top = pd.concat([gi, plot_df.mean(1).rename("mean_rsquared"), plot_df.std(1).rename("std_rsquared")], axis=1)
-    gi_top = gi_top.query("(std_rsquared < 0.05) & (nsamples > 160)")
-    gi_top = gi_top.sort_values("x_fdr")
+    _, ax = plt.subplots(1, 1, figsize=(2, 1.5), dpi=600)
+    sns.distplot(
+        gi["x_pval"],
+        kde=False,
+        hist_kws=dict(linewidth=0, alpha=1, color=GIPlot.PAL_DTRACE[2]),
+        ax=ax,
+    )
+    ax.set_xlabel(f"Log-ratio test p_value")
+    ax.grid(True, axis="y", ls="-", lw=0.1, alpha=1.0, zorder=0)
+    plt.savefig(
+        f"{RPATH}/1.Pred_lm_pval_histogram.pdf", bbox_inches="tight", transparent=True
+    )
+    plt.close("all")
 
     #
     #
-    y_id, x_id = "VIM", "FERMT2"
+    plot_df = gi.query("x_fdr < .05").sort_values("x_ppi")
+
+    s_transform = MinMaxScaler(feature_range=[1, 10])
+
+    _, ax = plt.subplots(1, 1, figsize=(3, 1.5), dpi=600)
+
+    sc = ax.scatter(
+        -np.log10(plot_df["x_pval"]),
+        plot_df["x_coef"],
+        s=s_transform.fit_transform(plot_df[["nsamples"]])[:, 0],
+        c=list(plot_df["x_ppi"].apply(lambda v: GIPlot.PPI_PAL[v])),
+        marker="o",
+        label=list(plot_df["x_ppi"]),
+        edgecolor="white",
+        lw=0.1,
+        alpha=0.5,
+    )
+
+    handles = [
+        mpatches.Circle([0.0, 0.0], 0.25, facecolor=c, label=t, lw=0)
+        for t, c in GIPlot.PPI_PAL.items()
+    ]
+    legend1 = ax.legend(
+        handles=handles,
+        loc="lower right",
+        title="PPI distance",
+        frameon=False,
+        prop={"size": 2},
+    )
+    legend1.get_title().set_fontsize("2")
+    ax.add_artist(legend1)
+
+    handles, labels = sc.legend_elements(
+        prop="sizes",
+        num=4,
+        func=lambda x: s_transform.inverse_transform(np.array(x).reshape(-1, 1))[:, 0],
+    )
+    legend2 = (
+        ax.legend(
+            handles,
+            labels,
+            loc="upper right",
+            title="# Samples",
+            frameon=False,
+            prop={"size": 2},
+        )
+        .get_title()
+        .set_fontsize("2")
+    )
+
+    ax.grid(True, ls="-", lw=0.1, alpha=1.0, zorder=0, axis="both")
+
+    ax.set_xlabel("Association p-value (-log10)")
+    ax.set_ylabel("Effect size (beta)")
+
+    plt.savefig(
+        f"{RPATH}/1.Pred_volcano.png", bbox_inches="tight", transparent=True, dpi=600
+    )
+    plt.close("all")
+
+    #
+    #
+    gi_top = gi[gi[[f"rsquared_{p}" for p in pmodels.PREDICTORS]].mean(1) > 0.3]
+    gi_top = gi_top.sort_values("x_fdr")
+    print(gi_top.head(60))
+
+    #
+    #
+    plot_df = (
+        gi_top.groupby("y_id")[[f"rsquared_{p}" for p in pmodels.PREDICTORS]].mean().T
+    )
+
+    g = sns.clustermap(
+        plot_df,
+        cmap="viridis",
+        figsize=(15, 1.5),
+        row_cluster=False,
+        dendrogram_ratio=(0.05, 0.5),
+        cbar_pos=(0, 0.2, 0.02, 0.6),
+        # cbar=False,
+    )
+    g.ax_heatmap.set_xlabel("")
+    plt.savefig(
+        f"{RPATH}/1.Pred_topgi_ptype_rsquared_clustermap.pdf",
+        bbox_inches="tight",
+        transparent=True,
+    )
+    plt.close("all")
+
+    #
+    #
+    for n, df in [("top", gi_top), ("all", gi)]:
+        plot_df = pd.concat(
+            [
+                df.query("x_coef > 0")
+                .groupby("x_ppi")["x_id"]
+                .count()
+                .reset_index()
+                .assign(type="pos"),
+                df.query("x_coef < 0")
+                .groupby("x_ppi")["x_id"]
+                .count()
+                .reset_index()
+                .assign(type="neg"),
+            ]
+        )
+
+        pal = dict(pos=GIPlot.PAL_DTRACE[1], neg=GIPlot.PAL_DTRACE[2])
+
+        _, ax = plt.subplots(1, 1, figsize=(2, 1.5), dpi=600)
+
+        sns.barplot(
+            "x_ppi",
+            "x_id",
+            "type",
+            data=plot_df,
+            order=GIPlot.PPI_ORDER,
+            palette=pal,
+            linewidth=0,
+            ax=ax,
+        )
+
+        ax.grid(True, ls="-", lw=0.1, alpha=1.0, zorder=0, axis="y")
+
+        ax.set_xlabel("Associated gene position in PPI")
+        ax.set_ylabel("Number of associations")
+
+        ax.legend(frameon=False)
+
+        plt.savefig(
+            f"{RPATH}/1.Pred_topgi_ppi_countplot_{n}.pdf",
+            bbox_inches="tight",
+            transparent=True,
+        )
+        plt.close("all")
+
+    #
+    #
+    cgenes = pd.read_csv(f"{DPATH}/cancer_genes_latest.csv.gz")
+
+    gi_top[gi_top["y_id"].isin(cgenes["gene_symbol"])].query("x_coef > 0").sort_values("x_pval").head(60)
+
+    #
+    #
+    y_id, x_id = "EPHA2", "MCL1"
 
     plot_df = pd.concat(
         [

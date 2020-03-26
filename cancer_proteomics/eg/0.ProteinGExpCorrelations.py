@@ -24,7 +24,7 @@ import pandas as pd
 import pkg_resources
 import seaborn as sns
 import matplotlib.pyplot as plt
-from scipy.stats import pearsonr
+from scipy.stats import pearsonr, spearmanr
 from crispy.GIPlot import GIPlot
 from crispy.CrispyPlot import CrispyPlot
 from statsmodels.stats.multitest import multipletests
@@ -33,7 +33,12 @@ from crispy.DataImporter import Proteomics, GeneExpression, CRISPR, Sample
 
 LOG = logging.getLogger("Crispy")
 DPATH = pkg_resources.resource_filename("crispy", "data/")
-RPATH = pkg_resources.resource_filename("notebooks", "swath_proteomics/reports/")
+RPATH = pkg_resources.resource_filename("reports", "eg/")
+
+# Cancer Driver Genes
+#
+
+cgenes = pd.read_csv(f"{DPATH}/cancer_genes_latest.csv.gz")
 
 
 # Protein abundance attenuation
@@ -67,7 +72,6 @@ LOG.info(f"CRISPR: {crispr.shape}")
 #
 
 ss = Sample().samplesheet
-ss = ss[ss["tissue"] != "Haematopoietic and Lymphoid"]
 
 samples = list(set.intersection(set(prot), set(gexp)))
 genes = list(set.intersection(set(prot.index), set(gexp.index)))
@@ -76,6 +80,7 @@ LOG.info(f"Genes: {len(genes)}; Samples: {len(samples)}")
 
 # Protein ~ Transcript correlations
 #
+
 
 def corr_genes(g):
     mprot = prot.loc[g, samples].dropna()
@@ -86,8 +91,15 @@ def corr_genes(g):
 
 res = pd.DataFrame([corr_genes(g) for g in genes]).sort_values("pval")
 res["fdr"] = multipletests(res["pval"], method="fdr_bh")[1]
-res["attenuation"] = p_attenuated.reindex(res["gene"])["attenuation_potential"].replace(np.nan, "NA").values
-res.to_csv(f"{RPATH}/0.Protein_Gexp_correlations.csv.gz", index=False, compression="gzip")
+res["attenuation"] = (
+    p_attenuated.reindex(res["gene"])["attenuation_potential"]
+    .replace(np.nan, "NA")
+    .values
+)
+res.to_csv(
+    f"{RPATH}/0.Protein_Gexp_correlations.csv.gz", index=False, compression="gzip"
+)
+# res = pd.read_csv(f"{RPATH}/0.Protein_Gexp_correlations.csv.gz")
 
 
 # Protein ~ GExp correlation histogram
@@ -138,14 +150,30 @@ ax.set_ylabel("Transcript ~ Protein")
 ax.set_title("Protein expression attenuated\nin tumour patient samples")
 ax.axhline(0, ls="-", lw=0.1, c="black", zorder=0)
 ax.grid(axis="both", lw=0.1, color="#e1e1e1", zorder=0)
-plt.savefig(f"{RPATH}/0.ProteinGexp_corr_attenuation_boxplot.pdf", bbox_inches="tight", transparent=True)
+plt.savefig(
+    f"{RPATH}/0.ProteinGexp_corr_attenuation_boxplot.pdf",
+    bbox_inches="tight",
+    transparent=True,
+)
 plt.close("all")
 
 
 # Representative examples
 #
 
-for gene in ["VIM", "EGFR", "IDH2", "NRAS", "SMARCB1", "ERBB2", "STAG1", "STAG2", "TP53", "RAC1", "MET"]:
+for gene in [
+    "VIM",
+    "EGFR",
+    "IDH2",
+    "NRAS",
+    "SMARCB1",
+    "ERBB2",
+    "STAG1",
+    "STAG2",
+    "TP53",
+    "RAC1",
+    "MET",
+]:
     plot_df = pd.concat(
         [
             prot.loc[gene, samples].rename("protein"),
@@ -165,15 +193,19 @@ for gene in ["VIM", "EGFR", "IDH2", "NRAS", "SMARCB1", "ERBB2", "STAG1", "STAG2"
 # Hexbin correlation with CRISPR
 #
 
-plot_df = pd.concat(
-    [
-        crispr.loc[genes, samples].unstack().rename("CRISPR"),
-        gexp.loc[genes, samples].unstack().rename("Transcriptomics"),
-        prot.loc[genes, samples].unstack().rename("Proteomics"),
-    ],
-    axis=1,
-    sort=False,
-).dropna().query("Proteomics < 10")
+plot_df = (
+    pd.concat(
+        [
+            crispr.reindex(index=genes, columns=samples).unstack().rename("CRISPR"),
+            gexp.reindex(index=genes, columns=samples).unstack().rename("Transcriptomics"),
+            prot.reindex(index=genes, columns=samples).unstack().rename("Proteomics"),
+        ],
+        axis=1,
+        sort=False,
+    )
+    .dropna()
+    .query("Proteomics < 10")
+)
 
 
 for x, y in [("Transcriptomics", "CRISPR"), ("Proteomics", "CRISPR")]:
@@ -194,5 +226,78 @@ for x, y in [("Transcriptomics", "CRISPR"), ("Proteomics", "CRISPR")]:
     ax.set_xlabel("Protein (intensities)" if x == "Proteomics" else "Transcript (voom)")
     ax.set_ylabel(f"{y} (scaled log2)")
 
-    plt.savefig(f"{RPATH}/0.ProteinGexp_hexbin_{x}_{y}.pdf", bbox_inches="tight", transparent=True)
+    plt.savefig(
+        f"{RPATH}/0.ProteinGexp_hexbin_{x}_{y}.pdf",
+        bbox_inches="tight",
+        transparent=True,
+    )
+    plt.close("all")
+
+
+#
+#
+
+# dtype = "tissue"
+dtype_thres = 10
+dtype_ss = ss.reindex(samples)[["model_name", "tissue", "cancer_type"]]
+
+for dtype in ["tissue", "cancer_type"]:
+    dtype_count = dtype_ss[dtype].value_counts()
+    dtype_ss = dtype_ss[dtype_ss[dtype].isin(dtype_count[dtype_count > dtype_thres].index)]
+
+    dtype_ss_corr = pd.DataFrame(
+        {
+            s: spearmanr(gexp.loc[genes, s], prot.loc[genes, s], nan_policy="omit")
+            for s in dtype_ss.index
+        },
+        index=["corr", "pval"],
+    ).T
+    dtype_ss_corr[dtype] = dtype_ss.loc[dtype_ss_corr.index][dtype]
+
+    dtype_genes_corr = []
+    for ctype, df in dtype_ss.groupby(dtype):
+        LOG.info(f"{dtype}={ctype}")
+        for g in genes:
+            x, y = gexp.loc[g, df.index], prot.loc[g, df.index]
+
+            if y.count() < dtype_thres:
+                continue
+
+            c, p = spearmanr(x, y, nan_policy="omit")
+            res = dict(ctype=ctype, gene=g, corr=c, pval=p, nsamples=y.count())
+            dtype_genes_corr.append(res)
+    dtype_genes_corr = pd.DataFrame(dtype_genes_corr)
+    dtype_genes_corr_m = pd.pivot_table(
+        dtype_genes_corr, index="gene", columns="ctype", values="corr"
+    )
+
+    #
+    #
+    order = dtype_ss_corr.groupby(dtype)["corr"].median().sort_values()
+
+    _, ax = plt.subplots(1, 1, figsize=(1.0, 0.125 * len(order)), dpi=600)
+    sns.boxplot(
+        x="corr",
+        y=dtype,
+        data=dtype_ss_corr,
+        notch=True,
+        order=order.index,
+        boxprops=dict(linewidth=0.3),
+        whiskerprops=dict(linewidth=0.3),
+        medianprops=CrispyPlot.MEDIANPROPS,
+        flierprops=CrispyPlot.FLIERPROPS,
+        color=GIPlot.PAL_DTRACE[2],
+        showcaps=False,
+        saturation=1,
+        orient="h",
+        ax=ax,
+    )
+    ax.set_xlabel("Transcript ~ Protein")
+    ax.set_ylabel("")
+    ax.grid(axis="x", lw=0.1, color="#e1e1e1", zorder=0)
+    plt.savefig(
+        f"{RPATH}/0.ProteinGexp_sample_{dtype}_correlation_boxplot.pdf",
+        bbox_inches="tight",
+        transparent=True,
+    )
     plt.close("all")

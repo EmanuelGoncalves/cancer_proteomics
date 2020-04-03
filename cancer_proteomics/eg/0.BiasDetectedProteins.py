@@ -34,13 +34,13 @@ from crispy.DataImporter import Proteomics, CORUM, GeneExpression
 
 LOG = logging.getLogger("Crispy")
 DPATH = pkg_resources.resource_filename("crispy", "data/")
-RPATH = pkg_resources.resource_filename("notebooks", "swath_proteomics/reports/")
+RPATH = pkg_resources.resource_filename("reports", "eg/")
 
 
 # SWATH-Proteomics
 #
 
-prot = Proteomics().filter(perc_measures=None, replicate_thres=None)
+prot = Proteomics().filter(perc_measures=None)
 LOG.info(f"Proteomics: {prot.shape}")
 
 

@@ -36,7 +36,7 @@ from crispy.DataImporter import Proteomics, GeneExpression, CopyNumber
 
 LOG = logging.getLogger("Crispy")
 DPATH = pkg_resources.resource_filename("crispy", "data/")
-RPATH = pkg_resources.resource_filename("notebooks", "swath_proteomics/reports/")
+RPATH = pkg_resources.resource_filename("reports", "eg/")
 
 
 # SWATH proteomics

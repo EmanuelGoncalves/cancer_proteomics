@@ -50,7 +50,7 @@ from crispy.DataImporter import (
 
 LOG = logging.getLogger("Crispy")
 DPATH = pkg_resources.resource_filename("crispy", "data/")
-RPATH = pkg_resources.resource_filename("notebooks", "swath_proteomics/reports/")
+RPATH = pkg_resources.resource_filename("reports", "eg/")
 
 
 # SWATH proteomics
@@ -63,7 +63,7 @@ LOG.info(f"Proteomics: {prot.shape}")
 # Overlaps
 #
 
-ss = Sample().samplesheet
+ss = Proteomics().ss
 
 samples = list(set.intersection(set(prot)))
 genes = list(set.intersection(set(prot.index)))
@@ -76,7 +76,7 @@ LOG.info(f"Genes: {len(genes)}; Samples: {len(samples)}")
 cancer_types_thres = 15
 
 cancer_types = (
-    ss.reindex(samples).reset_index().groupby("cancer_type")["model_id"].agg(set)
+    ss.reindex(samples).reset_index().groupby("model_type")["model_id"].agg(set)
 )
 cancer_types = pd.Series(
     {t: s for t, s in cancer_types.iteritems() if len(s) >= cancer_types_thres}

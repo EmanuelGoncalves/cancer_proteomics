@@ -36,7 +36,7 @@ from crispy.DataImporter import Proteomics, GeneExpression, CRISPR, Sample
 
 LOG = logging.getLogger("Crispy")
 DPATH = pkg_resources.resource_filename("crispy", "data/")
-RPATH = pkg_resources.resource_filename("notebooks", "swath_proteomics/reports/")
+RPATH = pkg_resources.resource_filename("reports", "eg/")
 
 
 def pc_labels(n):
@@ -80,7 +80,7 @@ def dim_reduction(
 
 
 def plot_dim_reduction(data, palette=None, ctype="tSNE"):
-    if "tissue" not in data.columns:
+    if "model_type" not in data.columns:
         data = data.assign(tissue="All")
 
     if palette is None:
@@ -88,7 +88,7 @@ def plot_dim_reduction(data, palette=None, ctype="tSNE"):
 
     fig, ax = plt.subplots(1, 1, figsize=(4.0, 4.0), dpi=600)
 
-    for t, df in data.groupby("tissue"):
+    for t, df in data.groupby("model_type"):
         ax.scatter(
             df["PC1"],
             df["PC2"],
@@ -111,7 +111,7 @@ def plot_dim_reduction(data, palette=None, ctype="tSNE"):
         bbox_to_anchor=(1, 0.5),
         prop={"size": 4},
         frameon=False,
-        title="Tissue",
+        title="Model type",
     ).get_title().set_fontsize("5")
 
     return ax
@@ -126,7 +126,7 @@ prot, gexp = Proteomics(), GeneExpression()
 # Samples
 #
 
-ss = Sample().samplesheet
+ss = prot.ss.copy()
 samples = set.intersection(set(prot.get_data()), set(gexp.get_data()))
 LOG.info(f"Samples: {len(samples)}")
 
@@ -134,7 +134,7 @@ LOG.info(f"Samples: {len(samples)}")
 # Filter data-sets
 #
 
-prot = prot.filter(subset=samples, replicate_thres=None)
+prot = prot.filter(subset=samples)
 prot = prot.T.fillna(prot.T.mean()).T
 LOG.info(f"Proteomics: {prot.shape}")
 
@@ -156,10 +156,10 @@ dimred = dict(
 for ctype in dimred:
     for dtype in dimred[ctype]:
         plot_df = pd.concat(
-            [dimred[ctype][dtype], ss["tissue"]], axis=1, sort=False
+            [dimred[ctype][dtype], ss["model_type"]], axis=1, sort=False
         ).dropna()
 
-        ax = plot_dim_reduction(plot_df, ctype=ctype, palette=CrispyPlot.PAL_TISSUE_2)
+        ax = plot_dim_reduction(plot_df, ctype=ctype, palette=CrispyPlot.PAL_MODEL_TYPE)
         ax.set_title(f"{ctype} - {dtype}")
         plt.savefig(
             f"{RPATH}/0.Dimension_reduction_{dtype}_{ctype}.pdf",

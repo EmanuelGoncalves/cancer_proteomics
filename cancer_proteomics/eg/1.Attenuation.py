@@ -25,10 +25,14 @@ import pkg_resources
 import seaborn as sns
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+from limix.stats import lrt_pvalues
+from sklearn.metrics import log_loss
+from sklearn.linear_model import LinearRegression
+from sklearn.preprocessing import StandardScaler
 from crispy.GIPlot import GIPlot
 from crispy.Enrichment import Enrichment
 from crispy.CrispyPlot import CrispyPlot
-from scipy.stats import pearsonr, spearmanr
+from scipy.stats import pearsonr, spearmanr, chi2
 from sklearn.mixture import GaussianMixture
 from sklearn.preprocessing import MinMaxScaler, scale
 from statsmodels.stats.multitest import multipletests
@@ -39,6 +43,7 @@ LOG = logging.getLogger("Crispy")
 DPATH = pkg_resources.resource_filename("crispy", "data/")
 RPATH = pkg_resources.resource_filename("reports", "eg/")
 
+ss = Proteomics().ss
 
 # SWATH proteomics
 #
@@ -58,6 +63,7 @@ LOG.info(f"Transcriptomics: {gexp.shape}")
 #
 
 cnv = CopyNumber().filter(subset=list(gexp))
+cnv_norm = np.log2(cnv.divide(ss.loc[cnv.columns, "ploidy"]) + 1)
 LOG.info(f"Copy number: {cnv.shape}")
 
 
@@ -69,11 +75,15 @@ genes = list(set.intersection(set(prot.index), set(gexp.index), set(cnv.index)))
 LOG.info(f"Genes: {len(genes)}; Samples: {len(samples)}")
 
 SS_THRES = 10
-ss = Sample().samplesheet
+
+ss["model_type"] = [c if t in ["Lung", "Haematopoietic and Lymphoid"] else t for t, c in ss[["tissue", "cancer_type"]].values]
+
+ss_pal = {**CrispyPlot.PAL_CANCER_TYPE, **CrispyPlot.PAL_TISSUE_2}
+
 ss_count = (
     ss.loc[samples]
     .reset_index()
-    .groupby("tissue")["model_id"]
+    .groupby("model_type")["model_id"]
     .agg(["count", lambda v: set(v)])
 )
 ss_count.columns = ["count", "set"]
@@ -89,11 +99,11 @@ _, ax = plt.subplots(1, 1, figsize=(1.5, 0.15 * plot_df.shape[0]), dpi=600)
 
 sns.barplot(
     "count",
-    "tissue",
+    "model_type",
     data=plot_df,
     orient="h",
     linewidth=0.0,
-    palette=CrispyPlot.PAL_TISSUE_2,
+    palette=ss_pal,
     saturation=1.0,
     ax=ax,
 )
@@ -113,6 +123,31 @@ plt.close("all")
 #
 
 
+def log_likelihood(y_true, y_pred):
+    n = len(y_true)
+    ssr = np.power(y_true - y_pred, 2).sum()
+    var = ssr / n
+
+    l = np.longfloat(1 / (np.sqrt(2 * np.pi * var))) ** n * np.exp(
+        -(np.power(y_true - y_pred, 2) / (2 * var)).sum()
+    )
+    ln_l = np.log(l)
+
+    return float(ln_l)
+
+
+def logratio_test(null_lml, alt_lmls, dof=1):
+    lr = 2 * (alt_lmls - null_lml)
+    lr_pval = chi2(dof).sf(lr)
+    return lr_pval
+
+
+def lm_logratio_test(y_pred_null, y_pred_alt_lm, y_true, dof=1):
+    lm_null_ll = log_likelihood(y_true, y_pred_null)
+    lm_alt_ll = log_likelihood(y_true, y_pred_alt_lm)
+    return logratio_test(lm_null_ll, lm_alt_ll, dof=dof)
+
+
 def corr_genes(protein, tissue):
     LOG.info(f"{tissue} - {protein}")
 
@@ -120,26 +155,55 @@ def corr_genes(protein, tissue):
 
     m = pd.concat(
         [
-            prot.reindex(columns=cell_lines).loc[protein].rename("proteomics"),
-            gexp.reindex(columns=cell_lines).loc[protein].rename("transcriptomics"),
-            cnv.reindex(columns=cell_lines).loc[protein].rename("copynumber"),
+            prot.reindex(columns=cell_lines).loc[protein].rename("p"),
+            gexp.reindex(columns=cell_lines).loc[protein].rename("t"),
+            cnv_norm.reindex(columns=cell_lines).loc[protein].rename("c"),
         ],
         axis=1,
         sort=False,
     ).dropna()
 
-    prot_r, prot_p = spearmanr(m["copynumber"], m["proteomics"])
-    gexp_r, gexp_p = spearmanr(m["copynumber"], m["transcriptomics"])
-
-    return dict(
+    m_res = dict(
         protein=protein,
         tissue=tissue,
-        protein_corr=prot_r,
-        protein_pval=prot_p,
-        gexp_corr=gexp_r,
-        gexp_pval=gexp_p,
+        protein_beta=np.nan,
+        protein_corr=np.nan,
+        protein_pval=np.nan,
+        gexp_beta=np.nan,
+        gexp_corr=np.nan,
+        gexp_pval=np.nan,
         n_obs=m.shape[0],
+        attenuation=np.nan,
+        lr_pval_t=np.nan,
+        lr_pval_p=np.nan,
     )
+
+    if m.shape[0] >= SS_THRES:
+        m["p"] = StandardScaler().fit_transform(m[["p"]])[:, 0]
+        m["t"] = StandardScaler().fit_transform(m[["t"]])[:, 0]
+
+        lm_p = LinearRegression().fit(m[["p"]], m["c"])
+        lm_t = LinearRegression().fit(m[["t"]], m["c"])
+        lm_pt = LinearRegression().fit(m[["p", "t"]], m["c"])
+
+        m_res["lr_pval_p"] = lm_logratio_test(
+            lm_p.predict(m[["p"]]),
+            lm_pt.predict(m[["p", "t"]]),
+            m["c"],
+        )
+
+        m_res["lr_pval_t"] = lm_logratio_test(
+            lm_p.predict(m[["t"]]),
+            lm_pt.predict(m[["p", "t"]]),
+            m["c"],
+        )
+        m_res["protein_beta"], m_res["gexp_beta"] = lm_p.coef_[0], lm_t.coef_[0]
+        m_res["attenuation"] = m_res["gexp_beta"] - m_res["protein_beta"]
+
+        m_res["protein_corr"], m_res["protein_pval"] = spearmanr(m["c"], m["p"])
+        m_res["gexp_corr"], m_res["gexp_pval"] = spearmanr(m["c"], m["t"])
+
+    return m_res
 
 
 patt = pd.DataFrame(
@@ -148,9 +212,13 @@ patt = pd.DataFrame(
         for t in ss_count.query(f"count >= {SS_THRES}").index
         for p in genes
     ]
-)
-patt = patt.query(f"n_obs >= {SS_THRES}")
-patt = patt.assign(attenuation=patt.eval("gexp_corr - protein_corr"))
+).dropna()
+
+# Adjust p-value
+patt["lr_fdr_t"] = multipletests(patt["lr_pval_t"], method="fdr_bh")[1]
+patt["lr_fdr_p"] = multipletests(patt["lr_pval_p"], method="fdr_bh")[1]
+patt["lr_fdr_t_cluster"] = patt["lr_fdr_t"].apply(lambda v: "High" if v < .01 else "Low")
+patt["lr_fdr_p_cluster"] = patt["lr_fdr_p"].apply(lambda v: "High" if v < .01 else "Low")
 
 # GMM
 patt_cluster = []
@@ -191,11 +259,11 @@ patt_m = pd.pivot_table(patt, index="tissue", columns="protein", values="attenua
 
 df = ss_count.query(f"count >= {SS_THRES}")
 
-ncols = 5
+ncols = 6
 nrows = np.ceil(df.shape[0] / ncols).astype(int)
 
-ax_min = patt[["gexp_corr", "protein_corr"]].min().min() * 1.1
-ax_max = patt[["gexp_corr", "protein_corr"]].max().max() * 1.1
+ax_min = patt[["gexp_beta", "protein_beta"]].min().min() * 1.1
+ax_max = patt[["gexp_beta", "protein_beta"]].max().max() * 1.1
 
 _, axs = plt.subplots(
     nrows, ncols, figsize=(2 * ncols, 2 * nrows), sharex="all", sharey="all", dpi=600
@@ -207,12 +275,13 @@ for i, t in enumerate(df.index):
 
     ax = axs[i_row, i_col]
 
-    pal = dict(High=CrispyPlot.PAL_TISSUE_2[t], Low=CrispyPlot.PAL_DTRACE[0])
+    pal = dict(High=ss_pal[t], Low=CrispyPlot.PAL_DTRACE[0])
 
     CrispyPlot.attenuation_scatter(
-        "gexp_corr",
-        "protein_corr",
-        patt.query(f"tissue == '{t}'"),
+        "gexp_beta",
+        "protein_beta",
+        patt[patt["tissue"] == t],
+        "lr_fdr_t_cluster",
         pal=pal,
         ax_min=ax_min,
         ax_max=ax_max,
@@ -238,20 +307,20 @@ plt.close("all")
 
 #
 #
-
-plot_df = pd.pivot_table(patt.assign(cluster_bin=patt["cluster"] == "High"), index="tissue", columns="protein", values="cluster_bin")
-plot_df = plot_df.loc[:, plot_df.sum() > 3]
-plot_df = plot_df.applymap(lambda v: v if np.isnan(v) else int(v))
+plot_df = patt_m.copy().dropna(axis=1)
 
 g = sns.clustermap(
     plot_df.fillna(0),
-    cmap="viridis",
+    cmap="Spectral",
+    center=0,
     linewidth=0,
     mask=plot_df.isnull(),
-    figsize=(10, 4),
+    figsize=(10, 6),
 )
+
 g.ax_heatmap.set_xlabel("Protein")
 g.ax_heatmap.set_ylabel("Tissue")
+
 plt.savefig(
     f"{RPATH}/1.Attenuation_clustermap.png",
     bbox_inches="tight",

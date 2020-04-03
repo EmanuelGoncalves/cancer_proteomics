@@ -44,7 +44,7 @@ from crispy.DataImporter import (
 
 LOG = logging.getLogger("Crispy")
 DPATH = pkg_resources.resource_filename("crispy", "data/")
-RPATH = pkg_resources.resource_filename("notebooks", "swath_proteomics/reports/")
+RPATH = pkg_resources.resource_filename("reports", "eg/")
 
 
 def nan_spearman(x, y):
@@ -68,7 +68,7 @@ crispr_obj = CRISPR()
 # Samples
 #
 
-ss = Sample().samplesheet
+ss = prot_obj.ss
 
 samples = set.intersection(
     set(prot_obj.get_data()), set(gexp_obj.get_data()), set(methy_obj.get_data())
@@ -136,19 +136,18 @@ plt.close("all")
 
 covariates = pd.concat(
     [
-        prot_obj.sample_corrs.rename("Proteomics replicates correlation"),
         prot.count().rename("Proteomics n. measurements"),
         methy.mean().rename("Global methylation"),
         pd.get_dummies(ss["msi_status"]),
         pd.get_dummies(ss["growth_properties"]),
         pd.get_dummies(ss["tissue"])["Haematopoietic and Lymphoid"],
-        ss.loc[samples, ["ploidy", "mutational_burden"]],
+        ss.reindex(index=samples, columns=["ploidy", "mutational_burden"]),
         prot.loc[["CDH1", "VIM", "MCL1", "BCL2L1"]].T.add_suffix("_proteomics"),
         gexp_obj.get_data().loc[["CDH1", "VIM", "MCL1", "BCL2L1"]].T.add_suffix("_transcriptomics"),
         methy.loc[["SLC5A1"]].T.add_suffix("_methylation"),
     ],
     axis=1,
-).loc[mofa.factors.index]
+).reindex(mofa.factors.index)
 
 covariates_corr = pd.DataFrame(
     {
@@ -299,7 +298,6 @@ f_x, f_y = "F5", "F10"
 plot_df = pd.concat(
     [
         mofa.factors[[f_x, f_y]],
-        prot_obj.sample_corrs.loc[samples].rename("Protein Reps Corr."),
         prot.count().loc[samples].rename("Protein num. meas."),
     ],
     axis=1,

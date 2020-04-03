@@ -68,8 +68,8 @@ LOG.info(f"CRISPR: {crispr.shape}")
 
 lmm_factors_crispr = pd.read_csv(f"{RPATH}/2.MultiOmicsCovs_lmm_crispr.csv.gz")
 
-lmm_prot = pd.read_csv(f"{RPATH}/lmm_protein_crispr_fillna.csv.gz")
-lmm_gexp = pd.read_csv(f"{RPATH}/lmm_gexp_crispr_fillna.csv.gz")
+lmm_prot = pd.read_csv(f"{RPATH}/lmm_protein_crispr.csv.gz")
+lmm_gexp = pd.read_csv(f"{RPATH}/lmm_gexp_crispr.csv.gz")
 
 
 # Annotate GI list
@@ -77,6 +77,7 @@ lmm_gexp = pd.read_csv(f"{RPATH}/lmm_gexp_crispr_fillna.csv.gz")
 
 # Significant associations
 gi_list = lmm_prot.query("fdr < .1")
+gi_list = gi_list.query("nsamples > 50").sort_values("pval")
 
 # Interactions in protein complexes
 corum_db = CORUM()
@@ -92,7 +93,7 @@ gi_list["gexp_signif"] = [
 ]
 
 # Number of measurements per protein
-gi_list["nsamples"] = prot.loc[gi_list["x_id"]].count(1).values
+gi_list["nsamples"] = prot.reindex(gi_list["x_id"]).count(1).values
 print(gi_list.head(60))
 
 

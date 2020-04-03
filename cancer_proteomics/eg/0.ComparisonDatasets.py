@@ -35,7 +35,7 @@ from crispy.DataImporter import Proteomics, GeneExpression, Sample
 
 LOG = logging.getLogger("Crispy")
 DPATH = pkg_resources.resource_filename("crispy", "data/")
-RPATH = pkg_resources.resource_filename("notebooks", "swath_proteomics/reports/")
+RPATH = pkg_resources.resource_filename("reports", "eg/")
 
 
 # Cancer genes
@@ -319,7 +319,6 @@ plot_df = pd.concat([
     gexp.loc[g, samples].rename("gexp"),
     ss["growth_properties"],
     prot_gdsc.count().rename("count"),
-    prot_obj.sample_corrs.rename("corr_rep")
 ], axis=1, sort=False).dropna()
 
 for d in ["GDSC", "CCLE"]:
@@ -332,12 +331,6 @@ for d in ["GDSC", "CCLE"]:
 GIPlot.gi_continuous_plot("GDSC", "gexp", "count", plot_df, mid_point_norm=False)
 plt.savefig(
     f"{RPATH}/0.Comparison_{g}_count.pdf", bbox_inches="tight", transparent=True
-)
-plt.close("all")
-
-GIPlot.gi_continuous_plot("GDSC", "gexp", "corr_rep", plot_df, mid_point_norm=False)
-plt.savefig(
-    f"{RPATH}/0.Comparison_{g}_corr_rep.pdf", bbox_inches="tight", transparent=True
 )
 plt.close("all")
 

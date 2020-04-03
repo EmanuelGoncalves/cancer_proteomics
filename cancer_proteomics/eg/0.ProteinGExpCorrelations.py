@@ -71,7 +71,7 @@ LOG.info(f"CRISPR: {crispr.shape}")
 # Overlaps
 #
 
-ss = Sample().samplesheet
+ss = Proteomics().ss
 
 samples = list(set.intersection(set(prot), set(gexp)))
 genes = list(set.intersection(set(prot.index), set(gexp.index)))
@@ -165,10 +165,8 @@ for gene in [
     "VIM",
     "EGFR",
     "IDH2",
-    "NRAS",
     "SMARCB1",
     "ERBB2",
-    "STAG1",
     "STAG2",
     "TP53",
     "RAC1",
@@ -239,9 +237,9 @@ for x, y in [("Transcriptomics", "CRISPR"), ("Proteomics", "CRISPR")]:
 
 # dtype = "tissue"
 dtype_thres = 10
-dtype_ss = ss.reindex(samples)[["model_name", "tissue", "cancer_type"]]
+dtype_ss = ss.reindex(samples)[["model_name", "model_type"]]
 
-for dtype in ["tissue", "cancer_type"]:
+for dtype in ["model_type"]:
     dtype_count = dtype_ss[dtype].value_counts()
     dtype_ss = dtype_ss[dtype_ss[dtype].isin(dtype_count[dtype_count > dtype_thres].index)]
 

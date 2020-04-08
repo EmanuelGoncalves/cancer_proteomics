@@ -22,6 +22,8 @@ import sys
 
 sys.path.extend(
     [
+        "/Users/eg14/Projects/crispy",
+        "/Users/eg14/Projects/crispy/crispy",
         "/Users/eg14/Projects/cancer_proteomics",
         "/Users/eg14/Projects/cancer_proteomics/cancer_proteomics",
     ]
@@ -53,24 +55,24 @@ if __name__ == "__main__":
 
     # Data-sets
     #
-    prot, gexp, crispr = Proteomics(), GeneExpression(), CRISPR()
+    prot_obj, gexp_obj, crispr_obj = Proteomics(), GeneExpression(), CRISPR()
 
     # Samples
     #
     samples = set.intersection(
-        set(prot.get_data()), set(gexp.get_data()), set(crispr.get_data())
+        set(prot_obj.get_data()), set(gexp_obj.get_data()), set(crispr_obj.get_data())
     )
     LOG.info(f"Samples: {len(samples)}")
 
     # Filter data-sets
     #
-    prot = prot.filter(subset=samples, perc_measures=0.03)
+    prot = prot_obj.filter(subset=samples, perc_measures=0.03)
     LOG.info(f"Proteomics: {prot.shape}")
 
-    gexp = gexp.filter(subset=samples)
+    gexp = gexp_obj.filter(subset=samples)
     LOG.info(f"Transcriptomics: {gexp.shape}")
 
-    crispr = crispr.filter(subset=samples, abs_thres=0.5, min_events=5)
+    crispr = crispr_obj.filter(dtype="merged", subset=samples, abs_thres=0.5, min_events=5)
     LOG.info(f"CRISPR: {crispr.shape}")
 
     # Genes
@@ -83,7 +85,7 @@ if __name__ == "__main__":
 
         # Protein ~ CRISPR LMMs
         #
-        prot_lmm = LMModels(y=prot.loc[args.genes, :].T, x=crispr.T).matrix_lmm()
+        prot_lmm = LMModels(y=prot.loc[args.genes, :].T, x=crispr.T, institute=crispr_obj.merged_institute).matrix_lmm()
         prot_lmm.to_csv(
             f"{RPATH}/lmm_protein_crispr/{'_'.join(args.genes)}.csv.gz",
             index=False,
@@ -92,7 +94,7 @@ if __name__ == "__main__":
 
         # Gene-expression ~ CRISPR LMMs
         #
-        gexp_lmm = LMModels(y=gexp.loc[args.genes, :].T, x=crispr.T).matrix_lmm()
+        gexp_lmm = LMModels(y=gexp.loc[args.genes, :].T, x=crispr.T, institute=crispr_obj.merged_institute).matrix_lmm()
         gexp_lmm.to_csv(
             f"{RPATH}/lmm_gexp_crispr/{'_'.join(args.genes)}.csv.gz",
             index=False,

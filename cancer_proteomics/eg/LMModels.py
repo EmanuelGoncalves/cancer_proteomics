@@ -312,7 +312,10 @@ class LMModels:
         covariates = []
 
         # CRISPR institute of origin
-        if institute:
+        if type(institute) is pd.Series:
+            covariates.append(pd.get_dummies(institute).astype(int))
+
+        elif institute is True:
             covariates.append(pd.get_dummies(samplesheet["institute"]).astype(int))
 
         # Cell lines culture conditions

@@ -117,7 +117,7 @@ if __name__ == "__main__":
             sort=False,
         ).sort_values("fdr")[LMModels.RES_ORDER]
         prot_table.to_csv(
-            f"{RPATH}/lmm_protein_crispr_fillna.csv.gz", index=False, compression="gzip"
+            f"{RPATH}/lmm_protein_crispr.csv.gz", index=False, compression="gzip"
         )
 
         # Assemble gexp
@@ -133,7 +133,7 @@ if __name__ == "__main__":
             sort=False,
         )
         gexp_table.to_csv(
-            f"{RPATH}/lmm_gexp_crispr_fillna.csv.gz", index=False, compression="gzip"
+            f"{RPATH}/lmm_gexp_crispr.csv.gz", index=False, compression="gzip"
         )
 
     else:

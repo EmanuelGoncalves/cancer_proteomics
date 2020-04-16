@@ -30,7 +30,7 @@ from natsort import natsorted
 from crispy.GIPlot import GIPlot
 from itertools import zip_longest
 from cancer_proteomics.eg.LMModels import LMModels
-from crispy.DataImporter import Proteomics, GeneExpression, CRISPR, CORUM, Sample
+from crispy.DataImporter import Proteomics, GeneExpression, CRISPR, CORUM, Sample, DPATH
 
 
 LOG = logging.getLogger("Crispy")
@@ -59,14 +59,14 @@ LOG.info(f"Proteomics: {prot.shape}")
 gexp = gexp.filter(subset=samples)
 LOG.info(f"Transcriptomics: {gexp.shape}")
 
-crispr = crispr.filter(subset=samples)
+crispr = crispr.filter(subset=samples, dtype="merged")
 LOG.info(f"CRISPR: {crispr.shape}")
+
+cgenes = pd.read_csv(f"{DPATH}/cancer_genes_latest.csv.gz")
 
 
 # Associations
 #
-
-lmm_factors_crispr = pd.read_csv(f"{RPATH}/2.MultiOmicsCovs_lmm_crispr.csv.gz")
 
 lmm_prot = pd.read_csv(f"{RPATH}/lmm_protein_crispr.csv.gz")
 lmm_gexp = pd.read_csv(f"{RPATH}/lmm_gexp_crispr.csv.gz")
@@ -100,32 +100,32 @@ print(gi_list.head(60))
 #
 #
 
-gi_pairs = [("ERBB2", "ERBB2"), ("SMARCA2", "SMARCA4"), ("WRN", "RPL22L1")]
+gi_pairs = [("ERBB2", "ERBB2"), ("SMARCA4", "SMARCA2"), ("RPL22L1", "WRN"), ("VPS4A", "VPS4B")]
 
-# y_id, x_id = "ERBB2", "MIEN1"
-for y_id, x_id in gi_pairs:
+# p, c = ("VPS4A", "VPS4B")
+for p, c in gi_pairs:
     plot_df = pd.concat(
         [
-            crispr.loc[[y_id]].T.add_suffix("_crispr"),
-            prot.loc[[x_id]].T.add_suffix("_prot"),
+            crispr.loc[[c]].T.add_suffix("_crispr"),
+            prot.loc[[p]].T.add_suffix("_prot"),
             ss["tissue"],
         ],
         axis=1,
         sort=False,
     ).dropna()
 
-    grid = GIPlot.gi_regression(f"{x_id}_prot", f"{y_id}_crispr", plot_df)
-    grid.set_axis_labels(f"{x_id}\nProtein intensities", f"{y_id}\nCRISPR log FC")
+    grid = GIPlot.gi_regression(f"{p}_prot", f"{c}_crispr", plot_df)
+    grid.set_axis_labels(f"{p}\nProtein intensities", f"{c}\nCRISPR log FC")
     plt.savefig(
-        f"{RPATH}/2.SL_{y_id}_{x_id}_regression.pdf", bbox_inches="tight", transparent=True
+        f"{RPATH}/2.SL_{p}_{c}_regression.pdf", bbox_inches="tight", transparent=True
     )
     plt.close("all")
 
-    ax = GIPlot.gi_tissue_plot(f"{x_id}_prot", f"{y_id}_crispr", plot_df)
-    ax.set_xlabel(f"{x_id}\nProtein intensities")
-    ax.set_ylabel(f"{y_id}\nCRISPR log FC")
+    ax = GIPlot.gi_tissue_plot(f"{p}_prot", f"{c}_crispr", plot_df)
+    ax.set_xlabel(f"{p}\nProtein intensities")
+    ax.set_ylabel(f"{c}\nCRISPR log FC")
     plt.savefig(
-        f"{RPATH}/2.SL_{y_id}_{x_id}_regression_tissue_plot.pdf",
+        f"{RPATH}/2.SL_{p}_{c}_regression_tissue_plot.pdf",
         transparent=True,
         bbox_inches="tight",
     )

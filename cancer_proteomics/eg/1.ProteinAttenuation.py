@@ -107,6 +107,8 @@ patt["cluster"] = [
     "High" if s_type[i] == clusters.argmax() else "Low" for i in patt.index
 ]
 
+patt.to_csv(f"{RPATH}/1.ProteinAttenuation.csv.gz", index=False, compression="gzip")
+
 
 # Attenuation scatter
 #

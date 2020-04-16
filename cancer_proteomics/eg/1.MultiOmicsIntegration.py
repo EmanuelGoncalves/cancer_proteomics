@@ -27,10 +27,11 @@ import pkg_resources
 import seaborn as sns
 import matplotlib.pyplot as plt
 from crispy.GIPlot import GIPlot
-from scipy.stats import spearmanr
+from scipy.stats import spearmanr, ttest_ind
 from crispy.MOFA import MOFA, MOFAPlot
 from crispy.CrispyPlot import CrispyPlot
 from cancer_proteomics.eg.LMModels import LMModels
+from crispy.DimensionReduction import dim_reduction, plot_dim_reduction
 from crispy.DataImporter import (
     Proteomics,
     GeneExpression,
@@ -38,19 +39,15 @@ from crispy.DataImporter import (
     CopyNumber,
     CRISPR,
     Sample,
+    DrugResponse,
     WES,
+    Mobem,
 )
 
 
 LOG = logging.getLogger("Crispy")
 DPATH = pkg_resources.resource_filename("crispy", "data/")
 RPATH = pkg_resources.resource_filename("reports", "eg/")
-
-
-def nan_spearman(x, y):
-    m = pd.concat([x.rename("x"), y.rename("y")], axis=1, sort=False).dropna()
-    c, p = spearmanr(m["x"], m["y"])
-    return c, p
 
 
 # Data-sets
@@ -62,7 +59,10 @@ gexp_obj = GeneExpression()
 
 wes_obj = WES()
 cn_obj = CopyNumber()
+mobem_obj = Mobem()
+
 crispr_obj = CRISPR()
+drug_obj = DrugResponse()
 
 
 # Samples
@@ -83,36 +83,52 @@ prot = prot_obj.filter(subset=samples)
 LOG.info(f"Proteomics: {prot.shape}")
 
 gexp = gexp_obj.filter(subset=samples)
-gexp = gexp.loc[gexp.std(1) > 1.5]
+gexp = gexp.loc[gexp.std(1) > 1]
 LOG.info(f"Transcriptomics: {gexp.shape}")
 
 methy = methy_obj.filter(subset=samples)
-methy = methy.loc[methy.std(1) > 0.1]
+methy = methy.loc[methy.std(1) > 0.05]
 LOG.info(f"Methylation: {methy.shape}")
 
-crispr = crispr_obj.filter(subset=samples, abs_thres=0.5, min_events=3)
+crispr = crispr_obj.filter(subset=samples, dtype="merged", abs_thres=0.5, min_events=3)
 LOG.info(f"CRISPR: {crispr.shape}")
+
+drespo = drug_obj.filter(subset=samples, filter_max_concentration=True, filter_combinations=True)
+drespo = drespo.set_index(pd.Series([";".join(map(str, i)) for i in drespo.index]))
+LOG.info(f"Drug response: {drespo.shape}")
 
 cn = cn_obj.filter(subset=samples.intersection(ss.index))
 cn = cn.loc[cn.std(1) > 1]
 cn = np.log2(cn.divide(ss.loc[cn.columns, "ploidy"]) + 1)
+cn = cn.dropna(how="all", axis=1)
+cn = cn.fillna(cn.mean())
 LOG.info(f"Copy-Number: {cn.shape}")
 
 wes = wes_obj.filter(subset=samples, min_events=3, recurrence=True)
 wes = wes.loc[wes.std(1) > 0]
 LOG.info(f"WES: {wes.shape}")
 
+mobem = mobem_obj.filter(subset=samples)
+mobem = mobem.loc[mobem.std(1) > 0]
+LOG.info(f"MOBEM: {mobem.shape}")
+
 
 # MOFA
 #
 
+groupby = ss.loc[samples, "tissue"].apply(
+    lambda v: "Haem" if v == "Haematopoietic and Lymphoid" else "Other"
+)
+
 mofa = MOFA(
     views=dict(proteomics=prot, transcriptomics=gexp, methylation=methy),
+    groupby=groupby,
     iterations=2000,
+    use_overlap=True,
     convergence_mode="fast",
-    factors_n=20,
+    factors_n=25,
+    from_file=f"{RPATH}/1.MultiOmics.hdf5",
 )
-mofa.save_hdf5(f"{RPATH}/1.MultiOmics.hdf5")
 
 
 # Factor clustermap
@@ -131,18 +147,33 @@ plt.savefig(f"{RPATH}/1.MultiOmics_rsquared_heatmap.pdf", bbox_inches="tight")
 plt.close("all")
 
 
+# Sample Protein ~ Transcript correlation
+#
+
+s_pg_corr = pd.read_csv(f"{RPATH}/2.SLProteinInteractions_gexp_prot_samples_corr.csv", index_col=0)
+
+
+# PPI
+#
+
+novel_ppis = pd.read_csv(f"{RPATH}/2.SLProteinInteractions.csv.gz").query(f"(prot_fdr < .05) & (prot_corr > 0.5)")
+
+
 # Factors data-frame integrated with other measurements
 #
 
 covariates = pd.concat(
     [
         prot.count().rename("Proteomics n. measurements"),
+        prot_obj.protein_raw.median().rename("Global proteomics"),
         methy.mean().rename("Global methylation"),
+        s_pg_corr["corr"].rename("gexp_prot_corr"),
         pd.get_dummies(ss["msi_status"]),
         pd.get_dummies(ss["growth_properties"]),
         pd.get_dummies(ss["tissue"])["Haematopoietic and Lymphoid"],
-        ss.reindex(index=samples, columns=["ploidy", "mutational_burden"]),
-        prot.loc[["CDH1", "VIM", "MCL1", "BCL2L1"]].T.add_suffix("_proteomics"),
+        ss.reindex(index=samples, columns=["ploidy", "mutational_burden", "growth"]),
+        wes.loc[["TP53"]].T.add_suffix("_wes"),
+        prot.loc[["CDH1", "VIM", "BCL2L1"]].T.add_suffix("_proteomics"),
         gexp_obj.get_data().loc[["CDH1", "VIM", "MCL1", "BCL2L1"]].T.add_suffix("_transcriptomics"),
         methy.loc[["SLC5A1"]].T.add_suffix("_methylation"),
     ],
@@ -151,7 +182,10 @@ covariates = pd.concat(
 
 covariates_corr = pd.DataFrame(
     {
-        f: {c: nan_spearman(mofa.factors[f], covariates[c])[0] for c in covariates}
+        f: {
+            c: spearmanr(mofa.factors[f], covariates[c], nan_policy="omit")[0]
+            for c in covariates
+        }
         for f in mofa.factors
     }
 )
@@ -171,51 +205,42 @@ plt.savefig(
 plt.close("all")
 
 
-# Factor 1 associations
+# # Factor association analysis
+# #
+#
+# m = LMModels.define_covariates(institute=crispr_obj.merged_institute, cancertype=False, mburden=False, ploidy=False)
+# lmm_crispr = LMModels(y=mofa.factors, x=crispr.T, m=m).matrix_lmm()
+# lmm_crispr.to_csv(
+#     f"{RPATH}/1.MultiOmics_lmm_crispr.csv.gz", index=False, compression="gzip"
+# )
+# print(lmm_crispr.query("fdr < 0.05").head(60))
+#
+# m = LMModels.define_covariates(institute=False, cancertype=False, mburden=False, ploidy=False)
+# lmm_cnv = LMModels(y=mofa.factors, x=cn.T, m=m).matrix_lmm()
+# lmm_cnv.to_csv(
+#     f"{RPATH}/1.MultiOmics_lmm_cnv.csv.gz", index=False, compression="gzip"
+# )
+# print(lmm_cnv.query("fdr < 0.05").head(60))
+#
+# m = LMModels.define_covariates(institute=False, cancertype=False, mburden=False, ploidy=False)
+# lmm_wes = LMModels(y=mofa.factors, x=wes.T, transform_x="none", m=m).matrix_lmm()
+# lmm_wes.to_csv(
+#     f"{RPATH}/1.MultiOmics_lmm_wes.csv.gz", index=False, compression="gzip"
+# )
+# print(lmm_wes.query("fdr < 0.05").head(60))
+#
+# m = LMModels.define_covariates(institute=False, cancertype=False, mburden=False, ploidy=False)
+# lmm_mobems = LMModels(y=mofa.factors, x=mobem.T, transform_x="none", m=m).matrix_lmm()
+# lmm_mobems.to_csv(
+#     f"{RPATH}/1.MultiOmics_lmm_mobems.csv.gz", index=False, compression="gzip"
+# )
+# print(lmm_mobems.query("fdr < 0.05").head(60))
+
+
+# Factors 1 and 2 associations
 #
 
-f = "F1"
-plot_df = pd.concat(
-    [
-        mofa.factors[f],
-        (ss["tissue"] == "Haematopoietic and Lymphoid").astype(int).rename("Haem."),
-        ss["growth_properties"],
-    ],
-    axis=1,
-    sort=False,
-).dropna()
-
-# Heme
-ax = GIPlot.gi_classification(
-    f, "Haem.", plot_df, orient="h", palette=GIPlot.PAL_DTRACE
-)
-ax.set_xlabel(f"Factor {f[1:]}\n")
-ax.set_ylabel(f"Haem cell lines")
-plt.gcf().set_size_inches(1.5, 1.0)
-plt.savefig(
-    f"{RPATH}/1.MultiOmics_{f}_heme_boxplot.pdf", bbox_inches="tight", transparent=True
-)
-plt.close("all")
-
-# Growth conditions
-ax = GIPlot.gi_classification(
-    f, "growth_properties", plot_df, orient="h", palette=GIPlot.PAL_GROWTH_CONDITIONS
-)
-ax.set_xlabel(f"Factor {f[1:]}\n")
-ax.set_ylabel(f"")
-plt.gcf().set_size_inches(1.5, 1.25)
-plt.savefig(
-    f"{RPATH}/1.MultiOmics_{f}_growth_conditions_boxplot.pdf",
-    bbox_inches="tight",
-    transparent=True,
-)
-plt.close("all")
-
-
-# Factors 2 and 3 associations
-#
-
-f_x, f_y = "F2", "F3"
+f_x, f_y = "F1", "F2"
 plot_df = pd.concat(
     [
         mofa.factors[[f_x, f_y]],
@@ -242,8 +267,8 @@ for f in [f_x, f_y]:
 
 # Tissue plot
 ax = GIPlot.gi_tissue_plot(f_x, f_y, plot_df)
-ax.set_xlabel(f"Factor {f_x[1:]} (Total R2={mofa.rsquare[f_x].sum() * 100:.1f}%)")
-ax.set_ylabel(f"Factor {f_y[1:]} (Total R2={mofa.rsquare[f_y].sum() * 100:.1f}%)")
+ax.set_xlabel(f"Factor {f_x[1:]}")
+ax.set_ylabel(f"Factor {f_y[1:]}")
 plt.savefig(
     f"{RPATH}/1.MultiOmics_{f_x}_{f_y}_tissue_plot.pdf",
     transparent=True,
@@ -259,162 +284,11 @@ for z in [
     "PTPRT_methylation",
 ]:
     ax = GIPlot.gi_continuous_plot(f_x, f_y, z, plot_df, cbar_label=z.replace("_", " "))
-    ax.set_xlabel(f"Factor {f_x[1:]} (Total R2={mofa.rsquare[f_x].sum() * 100:.1f}%)")
-    ax.set_ylabel(f"Factor {f_y[1:]} (Total R2={mofa.rsquare[f_y].sum() * 100:.1f}%)")
+    ax.set_xlabel(f"Factor {f_x[1:]}")
+    ax.set_ylabel(f"Factor {f_y[1:]}")
     plt.savefig(
         f"{RPATH}/1.MultiOmics_{f_x}_{f_y}_continous{z}.pdf",
         transparent=True,
         bbox_inches="tight",
     )
     plt.close("all")
-
-
-# Factors 4 and 6
-#
-
-f_x, f_y = "F4", "F6"
-plot_df = pd.concat(
-    [mofa.factors[[f_x, f_y]], covariates["Global methylation"], ss["tissue"]],
-    axis=1,
-    sort=False,
-).dropna()
-
-for f in [f_x, f_y]:
-    for v in ["Global methylation"]:
-        grid = GIPlot.gi_regression(f, v, plot_df)
-        grid.set_axis_labels(f"Factor {f[1:]}", v)
-        plt.savefig(
-            f"{RPATH}/1.MultiOmics_{f}_{v}_regression.pdf",
-            bbox_inches="tight",
-            transparent=True,
-        )
-        plt.close("all")
-
-
-# Factors 5 and 10
-#
-
-f_x, f_y = "F5", "F10"
-plot_df = pd.concat(
-    [
-        mofa.factors[[f_x, f_y]],
-        prot.count().loc[samples].rename("Protein num. meas."),
-    ],
-    axis=1,
-    sort=False,
-).dropna()
-
-for f in [f_x, f_y]:
-    for v in ["Protein Reps Corr.", "Protein num. meas."]:
-        grid = GIPlot.gi_regression(f, v, plot_df)
-        grid.set_axis_labels(f"Factor {f[1:]}", v)
-        plt.savefig(
-            f"{RPATH}/1.MultiOmics_{f}_{v}_regression.pdf",
-            bbox_inches="tight",
-            transparent=True,
-        )
-        plt.close("all")
-
-
-# Factor 7
-#
-
-f = "F7"
-plot_df = pd.concat(
-    [
-        mofa.factors[f],
-        mofa.views["methylation"]
-        .loc[["SLC5A1", "POLR2K"]]
-        .T.add_suffix("_methylation"),
-        ss["tissue"],
-    ],
-    axis=1,
-    sort=False,
-).dropna()
-
-for v in ["SLC5A1_methylation", "POLR2K_methylation"]:
-    grid = GIPlot.gi_regression(f, v, plot_df)
-    grid.set_axis_labels(f"Factor {f[1:]}", v.replace("_", " "))
-    plt.savefig(
-        f"{RPATH}/1.MultiOmics_{f}_{v}_regression.pdf",
-        bbox_inches="tight",
-        transparent=True,
-    )
-    plt.close("all")
-
-# Top features
-v = "methylation"
-
-MOFAPlot.factor_weights_scatter(mofa, v, f)
-plt.savefig(
-    f"{RPATH}/1.MultiOmics_{f}_top_features_{v}.pdf",
-    transparent=True,
-    bbox_inches="tight",
-)
-plt.close("all")
-
-MOFAPlot.view_heatmap(
-    mofa,
-    v,
-    f,
-    col_colors=CrispyPlot.get_palettes(samples, ss),
-    title=f"{v} heatmap of Factor{f[1:]} top features",
-)
-plt.savefig(
-    f"{RPATH}/1.MultiOmics_{f}_heatmap_{v}.pdf", transparent=True, bbox_inches="tight"
-)
-plt.close("all")
-
-
-# Factor 12
-#
-
-f = "F12"
-plot_df = pd.concat([mofa.factors[f], ss["msi_status"]], axis=1, sort=False).dropna()
-
-ax = GIPlot.gi_classification(
-    f, "msi_status", plot_df, orient="h", palette=GIPlot.PAL_MSS
-)
-ax.set_xlabel(f"Factor {f[1:]}\n")
-ax.set_ylabel(f"MSI status")
-plt.gcf().set_size_inches(1.5, 1.0)
-plt.savefig(
-    f"{RPATH}/1.MultiOmics_{f}_msi_status_boxplot.pdf",
-    bbox_inches="tight",
-    transparent=True,
-)
-plt.close("all")
-
-
-# Factor 11
-#
-
-f = "F11"
-plot_df = pd.concat(
-    [
-        mofa.factors[f],
-        prot.loc[["KRT17"]].T.add_suffix("_proteomics"),
-        gexp.loc[["TYR"]].T.add_suffix("_transcriptomics"),
-        pd.get_dummies(ss["tissue"])["Skin"].apply(lambda v: "Yes" if v else "No"),
-        ss["tissue"],
-    ],
-    axis=1,
-    sort=False,
-).dropna()
-
-ax = GIPlot.gi_classification("Skin", f, plot_df, orient="v", palette=GIPlot.PAL_YES_NO)
-ax.set_ylabel(f"Factor {f[1:]}\n")
-ax.set_xlabel(f"Skin")
-plt.gcf().set_size_inches(0.7, 1.5)
-plt.savefig(
-    f"{RPATH}/1.MultiOmics_{f}_Skin_boxplot.pdf", bbox_inches="tight", transparent=True
-)
-plt.close("all")
-
-ax = GIPlot.gi_tissue_plot("TYR_transcriptomics", "KRT17_proteomics", plot_df)
-plt.savefig(
-    f"{RPATH}/1.MultiOmics_TYR_KRT17_tissue_plot.pdf",
-    transparent=True,
-    bbox_inches="tight",
-)
-plt.close("all")

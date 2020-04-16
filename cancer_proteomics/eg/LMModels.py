@@ -261,7 +261,7 @@ class LMModels:
     def multipletests(
         parsed_results, pval_method="fdr_bh", field="pval", idx_cols=None
     ):
-        idx_cols = ["y_id"] if idx_cols is None else idx_cols
+        idx_cols = ["y_id", "x_id"] if idx_cols is None else idx_cols
 
         parsed_results_adj = []
 

@@ -372,81 +372,52 @@ plt.close("all")
 #
 #
 
-for x_var, y_var in [
-    ("prot_corr", "crispr_corr"),
-    ("prot_corr", "gexp_corr"),
-    ("crispr_corr", "gexp_corr"),
-]:
-    x, y = df_corr[x_var], df_corr[y_var]
+plot_df = pd.Series(list(novel_ppis["protein1"]) + list(novel_ppis["protein2"])).value_counts().rename("counts").to_frame()
+plot_df["index"] = np.arange(0, plot_df.shape[0])
 
-    _, ax = plt.subplots(1, 1, figsize=(3, 3), dpi=600)
+genes_highlight = ["PSMC3", "PSMC4", "PSMD4", "CTNNB1", "STK4", "MCM3", "SMARCA4", "NOTCH2", "KRAS"]
+genes_palette = sns.color_palette("Set2", n_colors=len(genes_highlight)).as_hex()
 
-    ax.hexbin(x, y, cmap="Spectral_r", gridsize=100, mincnt=1, bins="log", lw=0)
+_, ax = plt.subplots(1, 1, figsize=(3, 1.5), dpi=600)
 
-    ax.set_xlabel(f"PPI {x_var.split('_')[0]} Pearsons'R")
-    ax.set_ylabel(f"PPI {y_var.split('_')[0]} Pearsons'R")
+ax.scatter(plot_df["index"], plot_df["counts"], c=GIPlot.PAL_DBGD[2], s=5, linewidths=0)
 
-    ax.grid(True, ls=":", lw=0.1, alpha=1.0, zorder=0)
+for i, g in enumerate(plot_df.loc[genes_highlight].sort_values("counts", ascending=False).index):
+    ax.scatter(plot_df.loc[g, "index"], plot_df.loc[g, "counts"], c=genes_palette[i], s=10, linewidths=0, label=g)
 
-    cor, _ = spearmanr(x, y)
-    annot_text = f"Spearman's R={cor:.2g}"
-    ax.text(0.95, 0.05, annot_text, fontsize=4, transform=ax.transAxes, ha="right")
+ax.set_yscale('log')
 
-    plt.savefig(
-        f"{RPATH}/2.SLProtein_hexbin_{x_var.split('_')[0]}_{y_var.split('_')[0]}.pdf",
-        bbox_inches="tight",
-        transparent=True,
-    )
-    plt.close("all")
+ax.set_xlabel("Rank of genes")
+ax.set_ylabel(f"Number of interactions (log)")
+ax.legend(frameon=False, prop={"size": 4})
+ax.grid(True, ls=":", lw=0.1, alpha=1.0, zorder=0, axis="y")
 
-
-#
-#
-
-for dt in ["prot", "gexp", "crispr"]:
-    _, ax = plt.subplots(1, 1, figsize=(3, 1.5), dpi=600)
-
-    sns.distplot(
-        df_corr[f"{dt}_corr"],
-        kde=False,
-        bins=60,
-        hist_kws=dict(lw=0, alpha=1),
-        color=GIPlot.PAL_DTRACE[2],
-        ax=ax,
-    )
-
-    ax.grid(True, ls="-", lw=0.1, alpha=1.0, zorder=0)
-
-    ax.set_title(f"Mean correlation = {df_corr[f'{dt}_corr'].mean():.2f}")
-
-    plt.savefig(
-        f"{RPATH}/2.SLProtein_histogram_{dt}.pdf", bbox_inches="tight", transparent=True
-    )
-    plt.close("all")
+plt.savefig(
+    f"{RPATH}/2.SLProtein_PPI_waterfall.pdf",
+    bbox_inches="tight",
+)
+plt.close("all")
 
 
 #
 #
-
-df_corr.query(f"(prot_fdr < .05) & (prot_corr > 0.5)").sort_values(
-    "crispr_pvalue"
-).dropna().head(60)
 
 # x_var, y_var = "ARID1A", "SMARCB1"
-for x_var, y_var in [("CCT4", "XPO1"), ("ADSL", "ATIC"), ("CAD", "UMPS")]:
+for x_var, y_var in [("HSPD1", "HSPE1"), ("CCT4", "XPO1"), ("SMARCA4", "SMARCC1")]:
     plot_df = pd.concat(
         [
             prot.loc[[x_var, y_var]].T.add_prefix("prot_"),
             crispr_obj.merged.loc[[x_var, y_var]].T.add_prefix("crispr_"),
+            gexp.loc[[x_var, y_var]].T.add_prefix("gexp_"),
             ss["tissue"],
             crispr_obj.merged_institute.rename("institute"),
         ],
         axis=1,
     )
 
-    _, axs = plt.subplots(1, 2, figsize=(4.3, 2), dpi=600)
+    _, axs = plt.subplots(1, 3, figsize=(6.5, 2), dpi=600)
 
-    for i, dt in enumerate(["prot", "crispr"]):
+    for i, dt in enumerate(["gexp", "prot", "crispr"]):
         ax = axs[i]
 
         GIPlot.gi_regression_no_marginals(
@@ -454,7 +425,7 @@ for x_var, y_var in [("CCT4", "XPO1"), ("ADSL", "ATIC"), ("CAD", "UMPS")]:
             f"{dt}_{y_var}",
             plot_df,
             "tissue",
-            palette=GIPlot.PAL_TISSUE,
+            palette=GIPlot.PAL_TISSUE_2,
             style="institute" if dt == "crispr" else None,
             plot_hue_legend=(dt == "crispr"),
             plot_style_legend=(dt == "crispr"),
@@ -465,7 +436,7 @@ for x_var, y_var in [("CCT4", "XPO1"), ("ADSL", "ATIC"), ("CAD", "UMPS")]:
         ax.set_ylabel(None if i != 0 else y_var)
         ax.set_title(dt)
 
-    plt.subplots_adjust(hspace=0, wspace=0.3)
+    plt.subplots_adjust(hspace=0, wspace=0.2)
     plt.savefig(
         f"{RPATH}/2.SLProtein_giplot_{x_var}_{y_var}.pdf",
         bbox_inches="tight",
@@ -641,146 +612,6 @@ for ft in ["paralog or singleton", "homomer or not (all PPI)"]:
 #
 #
 
-plot_df = novel_ppis["string_dist"].value_counts().reset_index()
-
-_, ax = plt.subplots(1, 1, figsize=(1.5, 1.5), dpi=600)
-
-sns.barplot(
-    "index",
-    "string_dist",
-    data=plot_df,
-    linewidth=0.0,
-    saturation=1.0,
-    palette=GIPlot.PPI_PAL,
-    order=GIPlot.PPI_ORDER[1:],
-    ax=ax,
-)
-
-ax.set_ylabel("")
-ax.set_xlabel("String PPI distance")
-ax.grid(True, ls="-", lw=0.1, alpha=1.0, zorder=0, axis="y")
-
-plt.savefig(
-    f"{RPATH}/2.SLProtein_novel_ppi_string_dist_barplot.pdf",
-    bbox_inches="tight",
-    transparent=True,
-)
-plt.close("all")
-
-
-#
-#
-
-ppi_matrix = pd.DataFrame(
-    [
-        dict(protein1=p1, protein2=p2, value=c)
-        for px, py, c in df_corr[["protein1", "protein2", "prot_corr"]].values
-        for p1, p2 in [(px, py), (py, px)]
-    ]
-)
-ppi_matrix = pd.pivot_table(
-    ppi_matrix, index="protein1", columns="protein2", values="value", fill_value=np.nan
-)
-
-paralog_df = paralog_ds[paralog_ds["gene1 name"].isin(ppi_matrix.index)]
-paralog_df = paralog_df[paralog_ds["gene2 name"].isin(ppi_matrix.index)]
-paralog_df = paralog_df.groupby(["gene1 name", "gene2 name"])["dS"].first()
-
-plot_df = pd.DataFrame(
-    [
-        dict(
-            p1=p1,
-            p2=p2,
-            ds=paralog_df[(p1, p2)],
-            corr=spearmanr(ppi_matrix.loc[p1], ppi_matrix.loc[p2], nan_policy="omit")[0],
-        )
-        for p1, p2 in paralog_df.index
-    ]
-)
-
-ax = GIPlot.gi_regression("ds", "corr", plot_df)
-
-plt.savefig(
-    f"{RPATH}/2.SLProtein_paralogs_ds_regression.pdf",
-    bbox_inches="tight",
-    transparent=True,
-)
-plt.close("all")
-
-
-#
-#
-
-novel_ppi_matrix = pd.DataFrame(
-    [
-        dict(protein1=p1, protein2=p2, pval=pval)
-        for px, py, pval in novel_ppis[["protein1", "protein2", "prot_pvalue"]].values
-        for p1, p2 in [(px, py), (py, px)]
-    ]
-)
-novel_ppi_matrix = pd.pivot_table(
-    novel_ppi_matrix,
-    index="protein1",
-    columns="protein2",
-    values="pval",
-    fill_value=np.nan,
-)
-
-fs_mut = wes_obj.filter(mutation_class={"frameshift", "nonsense", "ess_splice"})
-fs_mut = fs_mut.reindex(
-    index=novel_ppi_matrix.index, columns=set(fs_mut).intersection(prot.columns)
-).dropna()
-
-
-fs_associations = []
-for p in fs_mut.index:
-    pis = novel_ppi_matrix.loc[p].dropna()
-
-    for pi in pis.index:
-        p_df = pd.concat([fs_mut.loc[p], crispr.loc[pi]], axis=1).dropna()
-
-        n_muts = p_df[p].sum()
-
-        if n_muts <= 10:
-            continue
-
-        ttest_stat, ttest_pval = ttest_ind(
-            p_df[p_df[p] == 0][pi], p_df[p_df[p] == 1][pi], equal_var=False
-        )
-
-        fs_associations.append(
-            dict(
-                px=p,
-                p_ppi=pi,
-                ttest_stat=ttest_stat,
-                ttest_pval=ttest_pval,
-                n_muts=n_muts,
-                n_obs=p_df.shape[0],
-            )
-        )
-fs_associations = pd.DataFrame(fs_associations)
-fs_associations["ttest_fdr"] = multipletests(fs_associations["ttest_pval"], method="fdr_bh")[1]
-print(fs_associations.sort_values("ttest_fdr"))
-
-g1, g2 = "STAG2", "SMC3"
-
-plot_df = pd.concat(
-    [prot.loc[g1], prot.loc[g2], fs_mut.loc[g1].rename("mutation")], axis=1
-).dropna()
-
-GIPlot.gi_regression_marginal(g1, g2, "mutation", plot_df, marginal_notch=True)
-
-plt.savefig(
-    f"{RPATH}/2.SLProtein_mutation_regression_{g1}_{g2}.pdf",
-    bbox_inches="tight",
-    transparent=True,
-)
-plt.close("all")
-
-
-#
-#
-
 ppi_matrix = pd.DataFrame(
     [
         dict(protein1=p1, protein2=p2, value=c)
@@ -802,75 +633,3 @@ plt.savefig(
     dpi=600,
 )
 plt.close("all")
-
-
-#
-#
-
-ppi_matrix = pd.DataFrame(
-    [
-        dict(protein1=p1, protein2=p2, value=1)
-        for px, py, c in novel_ppis[["protein1", "protein2", "prot_corr"]].values
-        for p1, p2 in [(px, py), (py, px)]
-    ]
-)
-ppi_matrix = pd.pivot_table(
-    ppi_matrix, index="protein1", columns="protein2", values="value", fill_value=0
-)
-
-genes_expressed = prot.T.apply(lambda v: zscore(v, nan_policy="omit")).T
-genes_expressed = (genes_expressed > 1).astype(int)
-
-samples = set(prot).intersection(genes_expressed)
-
-genes = set(ppi_matrix.index).intersection(genes_expressed.index)
-genes = list(ppi_matrix.reindex(index=genes, columns=genes).sum(1).rename("counts").to_frame().query("counts > 2").index)
-LOG.info(f"Samples={len(samples)}; Genes={len(genes)}")
-
-genes_expressed = genes_expressed.reindex(index=genes, columns=samples)
-genes_ppinteraction = ppi_matrix.reindex(index=genes, columns=genes)
-
-tppi_matrix = genes_ppinteraction.dot(genes_expressed)
-tppi_matrix = tppi_matrix.T.divide(genes_ppinteraction.sum(1)).T
-tppi_matrix = tppi_matrix.multiply(genes_expressed)
-# tppi_matrix = tppi_matrix[tppi_matrix.sum(1) > 5]
-# tppi_matrix.to_csv(f"{RPATH}/2.SLProteinInteractions_SampleSpecific.csv.gz", compression="gzip")
-# tppi_matrix = pd.read_csv(f"{RPATH}/2.SLProteinInteractions_SampleSpecific.csv.gz")
-
-ppi_dot_tsne, ppi_dot_pca = dim_reduction(tppi_matrix)
-
-dimred = dict(
-    tSNE=dict(proteomics=ppi_dot_tsne),
-    pca=dict(proteomics=ppi_dot_pca),
-)
-
-hue_field, pal = "model_type", GIPlot.PAL_MODEL_TYPE
-
-for ctype in dimred:
-    for dtype in dimred[ctype]:
-        plot_df = pd.concat(
-            [dimred[ctype][dtype], ss[hue_field]], axis=1, sort=False
-        ).dropna()
-
-        ax = plot_dim_reduction(plot_df, ctype=ctype, palette=pal, hue_filed=hue_field)
-        ax.set_title(f"{ctype} - {dtype}")
-        plt.savefig(
-            f"{RPATH}/2.SLProtein_dimension_reduction_{dtype}_{ctype}.pdf",
-            bbox_inches="tight",
-            transparent=True,
-        )
-        plt.close("all")
-
-
-gene = "SMARCC1"
-plot_df = pd.concat([
-    tppi_matrix.loc[[gene]].T.add_prefix("tppi_"),
-    # crispr.loc[["ME1", "ME2", "ME3"]].T.add_prefix("crispr_"),
-    # gexp.loc[["SMAD4", "ME1", "ME2", "ME3"]].T.add_prefix("gexp_"),
-    ss["tissue"],
-], axis=1).sort_values(f"tppi_{gene}").dropna()
-
-plot_df.corr()
-
-# GIPlot.gi_classification("tppi_ME2", "crispr_ME3", plot_df)
-# plt.show()

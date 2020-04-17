@@ -196,9 +196,7 @@ class LMModels:
         ssr = np.power(y_true - y_pred, 2).sum()
         var = ssr / n
 
-        l = np.longfloat(1 / (np.sqrt(2 * np.pi * var))) ** n * np.exp(
-            -(np.power(y_true - y_pred, 2) / (2 * var)).sum()
-        )
+        l = np.longdouble(1 / (np.sqrt(2 * np.pi * var))) ** n * np.exp(-(np.power(y_true - y_pred, 2) / (2 * var)).sum())
         ln_l = np.log(l)
 
         return float(ln_l)
@@ -298,6 +296,7 @@ class LMModels:
     def define_covariates(
         std_filter=True,
         medium=True,
+        tissuetype=True,
         cancertype=True,
         mburden=True,
         ploidy=True,
@@ -329,6 +328,11 @@ class LMModels:
         if cancertype:
             ctype = pd.get_dummies(samplesheet["cancer_type"])
             covariates.append(ctype)
+
+        # Cancer type
+        if tissuetype:
+            ttype = pd.get_dummies(samplesheet["tissue"])
+            covariates.append(ttype)
 
         # Mutation burden
         if mburden:

@@ -121,12 +121,12 @@ groupby = ss.loc[samples, "tissue"].apply(
 )
 
 mofa = MOFA(
-    views=dict(proteomics=prot, transcriptomics=gexp, methylation=methy),
+    views=dict(proteomics=prot, transcriptomics=gexp, methylation=methy, drespo=drespo),
     groupby=groupby,
     iterations=2000,
     use_overlap=True,
     convergence_mode="fast",
-    factors_n=25,
+    factors_n=30,
     from_file=f"{RPATH}/1.MultiOmics.hdf5",
 )
 

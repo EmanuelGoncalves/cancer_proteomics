@@ -292,3 +292,61 @@ for z in [
         bbox_inches="tight",
     )
     plt.close("all")
+
+
+#
+#
+
+plot_df = pd.concat([
+    gexp.loc["TP53"].rename("gexp"),
+    prot.loc["TP53"].rename("prot"),
+    mobem.loc["TP53_mut"].rename("mutation")
+], axis=1).dropna()
+
+g = GIPlot.gi_regression_marginal("prot", "gexp", "mutation", plot_df)
+g.set_axis_labels(f"TP53 protein", "TP53 gene-expression")
+plt.savefig(
+    f"{RPATH}/prot_gexp_mutation_TP53.png",
+    dpi=600,
+    transparent=True,
+    bbox_inches="tight",
+)
+plt.close("all")
+
+
+plot_df = pd.concat([
+    gexp.loc["TP53"].rename("gexp"),
+    prot.loc["TP53"].rename("prot"),
+    drespo.loc["1047;Nutlin-3a (-);GDSC2"].rename("drug"),
+], axis=1).dropna()
+
+ax = GIPlot.gi_continuous_plot("prot", "gexp", "drug", plot_df, cbar_label="Nutlin-3a IC50")
+ax.set_xlabel("TP53 protein")
+ax.set_ylabel("TP53 gene-expression")
+plt.savefig(
+    f"{RPATH}/prot_gexp_drug_TP53.png",
+    dpi=600,
+    transparent=True,
+    bbox_inches="tight",
+)
+plt.close("all")
+
+
+
+plot_df = pd.concat([
+    gexp.loc["TP53"].rename("gexp"),
+    prot.loc["TP53"].rename("prot"),
+    crispr.loc["TP53"].rename("crispr"),
+], axis=1).dropna()
+
+ax = GIPlot.gi_continuous_plot("prot", "gexp", "crispr", plot_df, cbar_label="CRISPR log2 FC")
+ax.set_xlabel("TP53 protein")
+ax.set_ylabel("TP53 gene-expression")
+plt.savefig(
+    f"{RPATH}/prot_gexp_crispr_TP53.png",
+    dpi=600,
+    transparent=True,
+    bbox_inches="tight",
+)
+plt.close("all")
+

@@ -97,27 +97,26 @@ patt_high = list(patt.query("cluster == 'High'")["gene"])
 #
 
 sl_lm = pd.read_csv(f"{RPATH}/lm_sklearn_protein_crispr.csv.gz").dropna()
-gi_list = sl_lm.query("fdr < .1").query("n > 50")
 
 # CORUM
-gi_list["corum"] = [
-    int((p1, p2) in corum_db.db_melt_symbol) for p1, p2 in gi_list[["y", "x"]].values
+sl_lm["corum"] = [
+    int((p1, p2) in corum_db.db_melt_symbol) for p1, p2 in sl_lm[["y", "x"]].values
 ]
 
 # BioGRID
-gi_list["biogrid"] = [
-    int((p1, p2) in biogrid_db.biogrid) for p1, p2 in gi_list[["y", "x"]].values
+sl_lm["biogrid"] = [
+    int((p1, p2) in biogrid_db.biogrid) for p1, p2 in sl_lm[["y", "x"]].values
 ]
 
 # HuRI
-gi_list["huri"] = [
-    int((p1, p2) in huri_db.huri) for p1, p2 in gi_list[["y", "x"]].values
+sl_lm["huri"] = [
+    int((p1, p2) in huri_db.huri) for p1, p2 in sl_lm[["y", "x"]].values
 ]
 
 # String distance
 ppi = PPI().build_string_ppi(score_thres=900)
-gi_list = PPI.ppi_annotation(gi_list, ppi, x_var="x", y_var="y", ppi_var="string_dist")
-gi_list = gi_list.assign(string=(gi_list["string_dist"] == "1").astype(int))
+sl_lm = PPI.ppi_annotation(sl_lm, ppi, x_var="x", y_var="y", ppi_var="string_dist")
+sl_lm = sl_lm.assign(string=(sl_lm["string_dist"] == "1").astype(int))
 
 # Previously reported SL
 known_sl = pd.read_excel(f"{DPATH}/sang_lee_nature_comms_sl_network.xlsx")
@@ -128,16 +127,85 @@ known_sl = {
     for p1, p2 in [(p[0], p[1]), (p[1], p[0])]
     if p1 != p2
 }
-gi_list["sl"] = [
-    int((p1, p2) in known_sl) for p1, p2 in gi_list[["y", "x"]].values
-]
+sl_lm["sl"] = [int((p1, p2) in known_sl) for p1, p2 in sl_lm[["y", "x"]].values]
 
 # Attenuated protein
-gi_list["attenuated"] = gi_list["y"].isin(patt_high).astype(int)
+sl_lm["attenuated"] = sl_lm["x"].isin(patt_high).astype(int)
 
 # Sort by LR p-value
-gi_list = gi_list.sort_values("pval")
+sl_lm = sl_lm.sort_values("pval")
+
+# Top significant associations
+gi_list = sl_lm.query("fdr < .1")
 print(gi_list.head(60))
+
+
+# Enrichment recall curves
+#
+
+dbs = ["corum", "biogrid", "string", "huri", "sl", "attenuated"]
+dbs_pal = dict(
+    biogrid=sns.color_palette("tab20c").as_hex()[0],
+    corum=sns.color_palette("tab20c").as_hex()[4],
+    string=sns.color_palette("tab20c").as_hex()[8],
+    huri=sns.color_palette("tab20c").as_hex()[12],
+    attenuated=sns.color_palette("tab20b").as_hex()[8],
+    sl=sns.color_palette("tab20b").as_hex()[4],
+)
+
+dbs_rc = dict()
+for db in dbs:
+    db_df = gi_list.reset_index(drop=True)[db]
+
+    rc_df_y = np.cumsum(db_df) / np.sum(db_df)
+    rc_df_x = np.array(db_df.index) / db_df.shape[0]
+    rc_df_auc = auc(rc_df_x, rc_df_y)
+
+    dbs_rc[db] = dict(x=list(rc_df_x), y=list(rc_df_y), auc=rc_df_auc)
+
+# Recall curves
+_, ax = plt.subplots(1, 1, figsize=(3, 3), dpi=600)
+
+for db in dbs_rc:
+    ax.plot(
+        dbs_rc[db]["x"],
+        dbs_rc[db]["y"],
+        label=f"{db} (AUC={dbs_rc[db]['auc']:.2f})",
+        c=dbs_pal[db],
+    )
+
+ax.plot([0, 1], [0, 1], "k--", lw=0.3)
+ax.legend(loc="lower right", frameon=False)
+
+ax.set_ylabel("Cumulative sum")
+ax.set_xlabel("Ranked correlation")
+ax.grid(True, axis="both", ls="-", lw=0.1, alpha=1.0, zorder=0)
+
+plt.savefig(f"{RPATH}/2.SL_roc_curves.pdf", bbox_inches="tight", transparent=True)
+plt.close("all")
+
+# Barplot
+plot_df = pd.DataFrame([dict(ppi=db, auc=dbs_rc[db]["auc"]) for db in dbs_rc])
+
+_, ax = plt.subplots(1, 1, figsize=(3, 1.5), dpi=600)
+
+sns.barplot(
+    "auc",
+    "ppi",
+    data=plot_df,
+    orient="h",
+    linewidth=0.0,
+    saturation=1.0,
+    palette=dbs_pal,
+    ax=ax,
+)
+
+ax.set_ylabel("")
+ax.set_xlabel("Recall curve AUC")
+ax.grid(True, ls="-", lw=0.1, alpha=1.0, zorder=0, axis="x")
+
+plt.savefig(f"{RPATH}/2.SL_roc_barplot.pdf", bbox_inches="tight", transparent=True)
+plt.close("all")
 
 
 # Volcano
@@ -145,17 +213,16 @@ print(gi_list.head(60))
 
 s_transform = MinMaxScaler(feature_range=[1, 10])
 
-_, ax = plt.subplots(1, 1, figsize=(3, 1.5), dpi=600)
+_, ax = plt.subplots(1, 1, figsize=(4.5, 2.5), dpi=600)
 
 for t, df in gi_list.groupby("string_dist"):
     sc = ax.scatter(
         -np.log10(df["pval"]),
         df["b"],
-        s=s_transform.fit_transform(df[["b"]].abs()),
+        s=s_transform.fit_transform(df[["n"]]),
         color=GIPlot.PPI_PAL[t],
         label=t,
-        edgecolor="white",
-        lw=0.1,
+        lw=0.0,
         alpha=0.5,
     )
 
@@ -165,15 +232,14 @@ legend1 = ax.legend(
     frameon=False,
     prop={"size": 4},
     title="PPI distance",
-    loc="center left",
-    bbox_to_anchor=(1, 0.5),
+    loc="lower right",
 )
-legend1.get_title().set_fontsize("2")
+legend1.get_title().set_fontsize("4")
 ax.add_artist(legend1)
 
 handles, labels = sc.legend_elements(
     prop="sizes",
-    num=4,
+    num=8,
     func=lambda x: s_transform.inverse_transform(np.array(x).reshape(-1, 1))[:, 0],
 )
 legend2 = (
@@ -181,22 +247,19 @@ legend2 = (
         handles,
         labels,
         loc="upper right",
-        title="Effect size (abs)",
+        title="# samples",
         frameon=False,
-        prop={"size": 2},
+        prop={"size": 4},
     )
-        .get_title()
-        .set_fontsize("2")
+    .get_title()
+    .set_fontsize("4")
 )
 
-plt.ylabel("Effect size (beta)")
-plt.xlabel("Association p-value (-log10)")
+ax.set_ylabel("Effect size (beta)")
+ax.set_xlabel("Association p-value (-log10)")
+ax.set_title("CRISPR ~ Protein associations")
 
-plt.savefig(
-    f"{RPATH}/2.SL_volcano.png",
-    transparent=True,
-    bbox_inches="tight",
-)
+plt.savefig(f"{RPATH}/2.SL_volcano.png", transparent=True, bbox_inches="tight")
 plt.close("all")
 
 
@@ -206,17 +269,23 @@ plt.close("all")
 df_corr = pd.read_csv(f"{RPATH}/2.SLProteinInteractions.csv.gz")
 novel_ppis = df_corr.query(f"(prot_fdr < .05) & (prot_corr > 0.5)")
 
-plot_df = pd.concat([
-    pd.Series(list(novel_ppis["protein1"]) + list(novel_ppis["protein2"])).value_counts().rename("ppis"),
-    gi_list[gi_list["b"].abs() > .5]["y"].value_counts().rename("gis"),
-], axis=1).dropna()
+plot_df = pd.Series(
+    list(novel_ppis["protein1"]) + list(novel_ppis["protein2"])
+).value_counts()
+plot_df = pd.concat(
+    [
+        plot_df.rename("ppis"),
+        gi_list["x"].value_counts().rename("gis"),
+    ],
+    axis=1,
+).dropna()
 
 _, ax = plt.subplots(1, 1, figsize=(2, 2), dpi=600)
 
 ax.scatter(plot_df["ppis"], plot_df["gis"], c=GIPlot.PAL_DBGD[2], s=5, linewidths=0)
 
-ax.set_yscale('log')
-ax.set_xscale('log')
+ax.set_yscale("log")
+ax.set_xscale("log")
 
 ax.set_xlabel("Number of PPIs")
 ax.set_ylabel(f"Number of GIs")
@@ -225,19 +294,9 @@ ax.grid(True, ls=":", lw=0.1, alpha=1.0, zorder=0, axis="both")
 
 cor, pval = spearmanr(plot_df["ppis"], plot_df["gis"])
 annot_text = f"Spearman's R={cor:.2g}, p-value={pval:.1e}"
-ax.text(
-    0.95,
-    0.05,
-    annot_text,
-    fontsize=4,
-    transform=ax.transAxes,
-    ha="right",
-)
+ax.text(0.95, 0.05, annot_text, fontsize=4, transform=ax.transAxes, ha="right")
 
-plt.savefig(
-    f"{RPATH}/2.SL_ppis_gis_correlation.pdf",
-    bbox_inches="tight",
-)
+plt.savefig(f"{RPATH}/2.SL_ppis_gis_correlation.pdf", bbox_inches="tight")
 plt.close("all")
 
 
@@ -253,7 +312,7 @@ gi_pairs = [
     ("PRKAR1A", "PRKAR1A"),
 ]
 
-# p, c = ("PCYT1A", "GUK1")
+# p, c = ("VIM", "FERMT2")
 for p, c in gi_pairs:
     plot_df = pd.concat(
         [
@@ -276,7 +335,9 @@ for p, c in gi_pairs:
     )
     plt.close("all")
 
-    ax = GIPlot.gi_tissue_plot(f"{p}_gexp", f"{c}_crispr", plot_df.dropna(subset=[f"{c}_crispr", f"{p}_gexp"]))
+    ax = GIPlot.gi_tissue_plot(
+        f"{p}_gexp", f"{c}_crispr", plot_df.dropna(subset=[f"{c}_crispr", f"{p}_gexp"])
+    )
     ax.set_xlabel(f"{p}\nGene expression (RNA-Seq voom)")
     ax.set_ylabel(f"{c}\nCRISPR log FC")
     plt.savefig(
@@ -285,4 +346,3 @@ for p, c in gi_pairs:
         bbox_inches="tight",
     )
     plt.close("all")
-

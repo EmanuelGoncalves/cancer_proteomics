@@ -351,7 +351,7 @@ class LMModels:
         if std_filter:
             covariates = covariates.loc[:, covariates.std() > 0]
 
-        return covariates.dropna()
+        return covariates.dropna().astype(np.float)
 
     @staticmethod
     def kinship(k, decimal_places=5):

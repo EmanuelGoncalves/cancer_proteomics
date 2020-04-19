@@ -22,15 +22,13 @@ import logging
 import numpy as np
 import pandas as pd
 import pkg_resources
-import seaborn as sns
-import matplotlib.pyplot as plt
-from scipy.stats import chi2, spearmanr
+from scipy.stats import chi2
+from natsort import natsorted
+from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LinearRegression
 from cancer_proteomics.eg.LMModels import LMModels
-from crispy.DataImporter import Proteomics, CRISPR
 from statsmodels.stats.multitest import multipletests
-from sklearn.preprocessing import StandardScaler, quantile_transform
-from crispy.DimensionReduction import dim_reduction_pca
+from crispy.DataImporter import Proteomics, CRISPR, GeneExpression
 
 
 LOG = logging.getLogger("Crispy")
@@ -43,12 +41,12 @@ class LModel:
     ):
         self.samples = set.intersection(set(Y.index), set(X.index), set(M.index))
 
-        self.X = X.loc[samples]
+        self.X = X.loc[self.samples]
         self.X_ma = np.ma.masked_invalid(self.X.values)
 
-        self.Y = Y.loc[samples]
+        self.Y = Y.loc[self.samples]
 
-        self.M = M.loc[samples]
+        self.M = M.loc[self.samples]
 
         self.normalize = normalize
         self.fit_intercept = fit_intercept
@@ -100,10 +98,10 @@ class LModel:
                 StandardScaler().fit_transform(y), index=y.index, columns=y.columns
             )
 
+            # Covariate matrix (remove invariable features and add noise)
             m = self.M.iloc[~x_ma.mask.any(axis=1), :]
             m = m.loc[:, m.std() > 0]
             m += np.random.normal(0, 1e-4, m.shape)
-            # m = m.loc[:, (m.dtypes != np.uint8) | (m.sum() > 3)]
 
             # Fit covariate model
             lm_small = self.model_regressor().fit(m, y)
@@ -138,100 +136,31 @@ class LModel:
         return lms
 
 
-# Data-sets
-#
+if __name__ == "__main__":
+    # Data-sets
+    #
+    gexp_obj, prot_obj, crispr_obj = GeneExpression(), Proteomics(), CRISPR()
 
-prot_obj, crispr_obj = Proteomics(), CRISPR()
-
-
-# Samples
-#
-
-samples = set.intersection(
-    set(prot_obj.get_data()), set(crispr_obj.get_data(dtype="merged"))
-)
-LOG.info(f"Samples: {len(samples)}")
-
-
-# Filter data-sets
-
-prot = prot_obj.filter(subset=samples, perc_measures=0.03)
-LOG.info(f"Proteomics: {prot.shape}")
-
-crispr = crispr_obj.filter(dtype="merged", subset=samples, abs_thres=0.5, min_events=5)
-LOG.info(f"CRISPR: {crispr.shape}")
-
-
-#
-#
-
-crispr_all = crispr_obj.filter(dtype="merged", subset=samples)
-crispr_pca = dim_reduction_pca(crispr_all)
-
-prot_all = prot_obj.filter(subset=samples, perc_measures=0.5)
-prot_all = prot_all.T.fillna(prot_all.T.mean()).T
-prot_pca = dim_reduction_pca(prot_all)
-
-s_pg_corr = pd.read_csv(
-    f"{RPATH}/2.SLProteinInteractions_gexp_prot_samples_corr.csv", index_col=0
-)
-
-putative_covariates = pd.concat(
-    [
-        prot.count().rename("Proteomics n. measurements"),
-        prot_obj.protein_raw.median().rename("Global proteomics"),
-        s_pg_corr["corr"].rename("gexp_prot_corr"),
-        pd.get_dummies(prot_obj.ss["msi_status"]),
-        pd.get_dummies(prot_obj.ss["growth_properties"]),
-        pd.get_dummies(prot_obj.ss["tissue"])["Haematopoietic and Lymphoid"],
-        prot_obj.ss.reindex(
-            index=samples, columns=["ploidy", "mutational_burden", "growth"]
-        ),
-    ],
-    axis=1,
-).loc[crispr_pca[0].index]
-
-putative_covariates_corr = {
-    d: pd.DataFrame(
-        {
-            f: {
-                c: spearmanr(df[f], putative_covariates[c], nan_policy="omit")[0]
-                for c in putative_covariates
-            }
-            for f in df
-        }
+    # Samples
+    #
+    samples = set.intersection(
+        set(prot_obj.get_data()), set(crispr_obj.get_data(dtype="merged"))
     )
-    for d, df in [("crispr", crispr_pca[0]), ("prot", prot_pca[0])]
-}
+    LOG.info(f"Samples: {len(samples)}")
 
-for d, df in putative_covariates_corr.items():
-    fig = sns.clustermap(
-        df,
-        cmap="Spectral",
-        center=0,
-        cbar=False,
-        annot=True,
-        fmt=".2f",
-        linewidths=0.5,
-        annot_kws={"fontsize": 5},
-        cbar_pos=None,
-        figsize=[df.shape[0] * 0.4] * 2,
-    )
-    fig.ax_heatmap.set_xlabel("")
-    fig.ax_heatmap.set_ylabel("")
+    # Filter data-sets
+    gexp = gexp_obj.filter(subset=samples)
+    LOG.info(f"Transcriptomics: {gexp.shape}")
 
-    plt.savefig(
-        f"{RPATH}/1.SL_covariates_pca_corrmap_{d}.pdf",
-        bbox_inches="tight",
-        transparent=True,
-    )
-    plt.close("all")
+    prot = prot_obj.filter(subset=samples)
+    LOG.info(f"Proteomics: {prot.shape}")
 
+    crispr = crispr_obj.filter(dtype="merged", subset=samples)
+    LOG.info(f"CRISPR: {crispr.shape}")
 
-# Covariates
-#
-
-covariates = LMModels.define_covariates(
+    # Covariates
+    #
+    covariates = LMModels.define_covariates(
         institute=crispr_obj.merged_institute,
         medium=True,
         cancertype=False,
@@ -239,33 +168,38 @@ covariates = LMModels.define_covariates(
         mburden=False,
         ploidy=True,
     )
-# covariates = pd.concat([
-#     covariates,
-#     pd.get_dummies(prot_obj.ss["tissue"])["Haematopoietic and Lymphoid"],
-# ], axis=1)
-covariates = covariates.reindex(samples).dropna()
+    covariates = covariates.reindex(samples).dropna()
 
-samples = set(covariates.index)
-LOG.info(f"Samples={len(samples)}; Covariates={covariates.shape[1]}")
+    samples = set(covariates.index)
+    LOG.info(f"Samples={len(samples)}; Covariates={covariates.shape[1]}")
 
+    # Reduce to independent variables with more observations than covariates
+    #
+    prot = prot[prot[samples].count(1) > (covariates.shape[1] + 1)]
+    LOG.info(f"Proteomics after filter: {prot.shape}")
 
-# Reduce to independent variables with more observations than covariates
-#
+    # Protein ~ CRISPR LMs
+    #
+    prot_lm = LModel(
+        Y=crispr[samples].T, X=prot[samples].T, M=covariates.loc[samples]
+    ).fit_matrix()
 
-prot = prot[prot[samples].count(1) > (covariates.shape[1] + 1)]
+    prot_lm.to_csv(
+        f"{RPATH}/lm_sklearn_protein_crispr.csv.gz", index=False, compression="gzip"
+    )
 
+    # Gene-expression ~ CRISPR LMs
+    #
+    gexp = gexp.reindex(
+        index=natsorted(set(gexp.index).intersection(prot.index)),
+        columns=samples.intersection(set(gexp.columns)),
+    )
+    LOG.info(f"Transcriptomics after filter: {gexp.shape}")
 
-# Protein ~ CRISPR LMMs
-#
+    gexp_lm = LModel(
+        Y=crispr[gexp.columns].T, X=gexp.T, M=covariates.loc[gexp.columns]
+    ).fit_matrix()
 
-prot_lm = LModel(
-    Y=crispr[samples].T, X=prot[samples].T, M=covariates.loc[samples]
-).fit_matrix()
-
-
-# Export
-#
-
-prot_lm.to_csv(
-    f"{RPATH}/lm_sklearn_protein_crispr.csv.gz", index=False, compression="gzip"
-)
+    gexp_lm.to_csv(
+        f"{RPATH}/lm_sklearn_transcript_crispr.csv.gz", index=False, compression="gzip"
+    )

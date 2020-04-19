@@ -129,6 +129,16 @@ known_sl = {
 }
 sl_lm["sl"] = [int((p1, p2) in known_sl) for p1, p2 in sl_lm[["y", "x"]].values]
 
+# Manually curated
+curated_sl = pd.read_csv(f"{DPATH}/sl_list_curated.tab", sep="\t")
+curated_sl = {
+    (p1, p2)
+    for p in curated_sl[["gene1", "gene2"]].values
+    for p1, p2 in [(p[0], p[1]), (p[1], p[0])]
+    if p1 != p2
+}
+sl_lm["sl2"] = [int((p1, p2) in curated_sl) for p1, p2 in sl_lm[["y", "x"]].values]
+
 # Attenuated protein
 sl_lm["attenuated"] = sl_lm["x"].isin(patt_high).astype(int)
 
@@ -143,7 +153,7 @@ print(gi_list.head(60))
 # Enrichment recall curves
 #
 
-dbs = ["corum", "biogrid", "string", "huri", "sl", "attenuated"]
+dbs = ["corum", "biogrid", "string", "huri", "attenuated"]
 dbs_pal = dict(
     biogrid=sns.color_palette("tab20c").as_hex()[0],
     corum=sns.color_palette("tab20c").as_hex()[4],
@@ -151,6 +161,7 @@ dbs_pal = dict(
     huri=sns.color_palette("tab20c").as_hex()[12],
     attenuated=sns.color_palette("tab20b").as_hex()[8],
     sl=sns.color_palette("tab20b").as_hex()[4],
+    sl2=sns.color_palette("tab20b").as_hex()[12],
 )
 
 dbs_rc = dict()
@@ -312,7 +323,7 @@ gi_pairs = [
     ("PRKAR1A", "PRKAR1A"),
 ]
 
-# p, c = ("VIM", "FERMT2")
+# p, c = ("FDXR", "TP53")
 for p, c in gi_pairs:
     plot_df = pd.concat(
         [

@@ -20,6 +20,7 @@
 
 import os
 import sys
+import gseapy
 import logging
 import argparse
 import numpy as np
@@ -30,9 +31,12 @@ import matplotlib.pyplot as plt
 from natsort import natsorted
 from crispy.GIPlot import GIPlot
 from itertools import zip_longest
+from crispy.MOFA import MOFA, MOFAPlot
 from sklearn.metrics.ranking import auc
+from crispy.Enrichment import Enrichment
 from scipy.stats import pearsonr, spearmanr
 from cancer_proteomics.eg.LMModels import LMModels
+from cancer_proteomics.eg.SLinteractionsSklearn import LModel
 from sklearn.preprocessing import MinMaxScaler
 from crispy.DataImporter import (
     Proteomics,
@@ -44,6 +48,7 @@ from crispy.DataImporter import (
     BioGRID,
     HuRI,
     PPI,
+    Mobem,
 )
 
 
@@ -57,6 +62,7 @@ RPATH = pkg_resources.resource_filename("reports", "eg/")
 prot_obj = Proteomics()
 gexp_obj = GeneExpression()
 crispr_obj = CRISPR()
+mobem_obj = Mobem()
 
 
 # Filter data-sets
@@ -91,6 +97,31 @@ cgenes = list(set(cgenes["gene_symbol"]))
 patt = pd.read_csv(f"{RPATH}/1.ProteinAttenuation.csv.gz")
 patt_low = list(patt.query("cluster == 'Low'")["gene"])
 patt_high = list(patt.query("cluster == 'High'")["gene"])
+
+
+# PPIs found
+#
+
+ppis = pd.read_csv(f"{RPATH}/2.SLProteinInteractions.csv.gz")
+novel_ppis = ppis.query(f"(prot_fdr < .05) & (prot_corr > 0.5)")
+
+
+# Significant drug ~ crispr
+#
+
+dcrispr = pd.read_excel(f"{DPATH}/Significant Drug CRISPR Dataset EV5.xlsx", sheet_name="Dataset EV5")
+
+
+# MOFA factors
+#
+
+mofa_factors, mofa_weights, mofa_rsquare = MOFA.read_mofa_hdf5(f"{RPATH}/1.MultiOmics.hdf5")
+
+
+# Subtypes
+#
+
+pam50 = pd.read_csv(f"{DPATH}/breast_pam50.csv").set_index("model_id")
 
 
 # GI list
@@ -139,6 +170,18 @@ curated_sl = {
 }
 sl_lm["sl2"] = [int((p1, p2) in curated_sl) for p1, p2 in sl_lm[["y", "x"]].values]
 
+# Paralogs
+paralog_ds = pd.read_excel(
+    f"{DPATH}/msb198871-sup-0004-datasetev1.xlsx", sheet_name="paralog annotations"
+)
+paralog_ds = {
+    (p1, p2)
+    for p in paralog_ds[["gene1 name", "gene2 name"]].values
+    for p1, p2 in [(p[0], p[1]), (p[1], p[0])]
+    if p1 != p2
+}
+sl_lm["paralogs"] = [int((p1, p2) in paralog_ds) for p1, p2 in sl_lm[["y", "x"]].values]
+
 # Attenuated protein
 sl_lm["attenuated"] = sl_lm["x"].isin(patt_high).astype(int)
 
@@ -153,7 +196,7 @@ print(gi_list.head(60))
 # Enrichment recall curves
 #
 
-dbs = ["corum", "biogrid", "string", "huri", "attenuated"]
+dbs = ["corum", "biogrid", "string", "huri", "attenuated", "paralogs"]
 dbs_pal = dict(
     biogrid=sns.color_palette("tab20c").as_hex()[0],
     corum=sns.color_palette("tab20c").as_hex()[4],
@@ -162,6 +205,7 @@ dbs_pal = dict(
     attenuated=sns.color_palette("tab20b").as_hex()[8],
     sl=sns.color_palette("tab20b").as_hex()[4],
     sl2=sns.color_palette("tab20b").as_hex()[12],
+    paralogs=sns.color_palette("tab20b").as_hex()[0],
 )
 
 dbs_rc = dict()
@@ -320,10 +364,12 @@ gi_pairs = [
     ("RPL22L1", "WRN"),
     ("VPS4A", "VPS4B"),
     ("EMD", "LEMD2"),
+    ("HNRNPH1", "HNRNPH1"),
     ("PRKAR1A", "PRKAR1A"),
+    ("BSG", "FOXA1"),
 ]
 
-# p, c = ("FDXR", "TP53")
+# p, c = "CRTAP", "FOXA1"
 for p, c in gi_pairs:
     plot_df = pd.concat(
         [
@@ -353,6 +399,62 @@ for p, c in gi_pairs:
     ax.set_ylabel(f"{c}\nCRISPR log FC")
     plt.savefig(
         f"{RPATH}/2.SL_{p}_{c}_regression_tissue_plot_gexp.pdf",
+        transparent=True,
+        bbox_inches="tight",
+    )
+    plt.close("all")
+
+
+#
+#
+
+p, c = ("BSG", "FOXA1")
+
+plot_df = pd.concat(
+    [
+        crispr.loc[[c]].T.add_suffix("_crispr"),
+        prot.loc[[p]].T.add_suffix("_prot"),
+        gexp.loc[[p]].T.add_suffix("_gexp"),
+        prot_obj.broad.loc[[p, "SLC16A1"]].T.add_suffix("_broad"),
+        ss["tissue"],
+        pam50[["PAM50", "Jiang_et_al"]],
+    ],
+    axis=1,
+    sort=False,
+).dropna(subset=[f"{c}_crispr", f"{p}_prot"])
+
+# Association with BROAD
+for p_idx in [p, "SLC16A1"]:
+    ax = GIPlot.gi_tissue_plot(f"{p_idx}_broad", f"{c}_crispr", plot_df.dropna(subset=[f"{p_idx}_broad"]))
+    ax.set_xlabel(f"{p_idx}\nProtein intensities (CCLE)")
+    ax.set_ylabel(f"{c}\nCRISPR log FC")
+    plt.savefig(
+        f"{RPATH}/2.SL_{p_idx}_CCLE_{c}_regression_tissue_plot.pdf",
+        transparent=True,
+        bbox_inches="tight",
+    )
+    plt.close("all")
+
+#
+ax = GIPlot.gi_tissue_plot(f"{p}_prot", f"{c}_crispr", plot_df[plot_df["tissue"].isin(["Breast", "Prostate"])])
+ax.set_xlabel(f"{p}\nProtein intensities")
+ax.set_ylabel(f"{c}\nCRISPR log FC")
+plt.savefig(
+    f"{RPATH}/2.SL_{p}_{c}_regression_tissue_plot_selected.pdf",
+    transparent=True,
+    bbox_inches="tight",
+)
+plt.close("all")
+
+#
+pam50s = ["PAM50", "Jiang_et_al"]
+huetypes = set(plot_df[pam50s[0]].dropna())
+palette = pd.Series(sns.color_palette("Set1", n_colors=len(huetypes)).as_hex(), index=huetypes)
+df = plot_df.dropna(subset=pam50s)
+for ptype in pam50s:
+    GIPlot.gi_classification(f"{c}_crispr", ptype, df, palette=palette.to_dict(), orient="h", notch=False, order=huetypes)
+    plt.savefig(
+        f"{RPATH}/2.SL_PAM50_{ptype}_{c}_boxplot.pdf",
         transparent=True,
         bbox_inches="tight",
     )

@@ -37,16 +37,19 @@ RPATH = pkg_resources.resource_filename("reports", "eg/")
 
 class LModel:
     def __init__(
-        self, Y, X, M, normalize=False, fit_intercept=True, copy_X=True, n_jobs=4
+        self, Y, X, M, M2=None, normalize=False, fit_intercept=True, copy_X=True, n_jobs=4
     ):
-        self.samples = set.intersection(set(Y.index), set(X.index), set(M.index))
+        self.samples = set.intersection(set(Y.index), set(X.index), set(M.index), set(Y.index) if M2 is None else set(M2.index))
 
         self.X = X.loc[self.samples]
+        self.X = self.X.loc[:, self.X.count() > (M.shape[1] + (1 if M2 is None else 2))]
         self.X_ma = np.ma.masked_invalid(self.X.values)
 
         self.Y = Y.loc[self.samples]
 
         self.M = M.loc[self.samples]
+
+        self.M2 = M2.loc[self.samples, self.X.columns] if M2 is not None else M2
 
         self.normalize = normalize
         self.fit_intercept = fit_intercept
@@ -78,7 +81,7 @@ class LModel:
     def fit_matrix(self):
         lms = []
 
-        # x_idx, x_var, y_var = 510, "CLEC2B", "PSMF1"
+        # x_idx, x_var, y_var = 3167, "VIM", "BAX"
         for x_idx, x_var in enumerate(self.X):
             self.log.info(f"LM={x_var} ({x_idx})")
 
@@ -100,6 +103,14 @@ class LModel:
 
             # Covariate matrix (remove invariable features and add noise)
             m = self.M.iloc[~x_ma.mask.any(axis=1), :]
+            if self.M2 is not None:
+                m2 = self.M2.iloc[~x_ma.mask.any(axis=1), x_idx]
+                m2 = pd.DataFrame(
+                    StandardScaler().fit_transform(m2.to_frame()),
+                    index=m2.index,
+                    columns=[x_var],
+                )
+                m = pd.concat([m2, m], axis=1)
             m = m.loc[:, m.std() > 0]
             m += np.random.normal(0, 1e-4, m.shape)
 
@@ -178,7 +189,7 @@ if __name__ == "__main__":
     prot = prot[prot[samples].count(1) > (covariates.shape[1] + 1)]
     LOG.info(f"Proteomics after filter: {prot.shape}")
 
-    # Protein ~ CRISPR LMs
+    # LMs: CRISPR ~ Protein
     #
     prot_lm = LModel(
         Y=crispr[samples].T, X=prot[samples].T, M=covariates.loc[samples]
@@ -188,7 +199,7 @@ if __name__ == "__main__":
         f"{RPATH}/lm_sklearn_protein_crispr.csv.gz", index=False, compression="gzip"
     )
 
-    # Gene-expression ~ CRISPR LMs
+    # LM: CRISPR ~ Gene-expression
     #
     gexp = gexp.reindex(
         index=natsorted(set(gexp.index).intersection(prot.index)),
@@ -203,3 +214,22 @@ if __name__ == "__main__":
     gexp_lm.to_csv(
         f"{RPATH}/lm_sklearn_transcript_crispr.csv.gz", index=False, compression="gzip"
     )
+
+    # LM: CRISPR ~ Protein - Gene-expression
+    #
+    prot = prot.reindex(index=gexp.index, columns=gexp.columns)
+    prot = prot[prot.count(1) > (covariates.shape[1] + 2)]
+    gexp = gexp.reindex(index=prot.index, columns=prot.columns)
+    LOG.info(f"Proteomics after filter with GExp: {prot.shape}")
+
+    degr_lm = LModel(
+        Y=crispr[gexp.columns].T,
+        X=prot.T,
+        M=covariates.loc[gexp.columns],
+        M2=gexp.T,
+    ).fit_matrix()
+
+    degr_lm.to_csv(
+        f"{RPATH}/lm_sklearn_degr_crispr.csv.gz", index=False, compression="gzip"
+    )
+

@@ -26,11 +26,14 @@ import pandas as pd
 import pkg_resources
 import seaborn as sns
 import matplotlib.pyplot as plt
+from matplotlib import cm
+from Enrichment import Enrichment
 from crispy.GIPlot import GIPlot
 from scipy.stats import spearmanr, ttest_ind
 from crispy.MOFA import MOFA, MOFAPlot
 from crispy.CrispyPlot import CrispyPlot
 from cancer_proteomics.eg.LMModels import LMModels
+from cancer_proteomics.eg.SLinteractionsSklearn import LModel
 from crispy.DimensionReduction import dim_reduction, plot_dim_reduction
 from crispy.DataImporter import (
     Proteomics,
@@ -90,18 +93,18 @@ methy = methy_obj.filter(subset=samples)
 methy = methy.loc[methy.std(1) > 0.05]
 LOG.info(f"Methylation: {methy.shape}")
 
-crispr = crispr_obj.filter(subset=samples, dtype="merged", abs_thres=0.5, min_events=3)
+crispr = crispr_obj.filter(subset=samples, dtype="merged")
 LOG.info(f"CRISPR: {crispr.shape}")
 
-drespo = drug_obj.filter(subset=samples, filter_max_concentration=True, filter_combinations=True)
+drespo = drug_obj.filter(
+    subset=samples, filter_max_concentration=True, filter_combinations=True
+)
 drespo = drespo.set_index(pd.Series([";".join(map(str, i)) for i in drespo.index]))
 LOG.info(f"Drug response: {drespo.shape}")
 
 cn = cn_obj.filter(subset=samples.intersection(ss.index))
-cn = cn.loc[cn.std(1) > 1]
+cn = cn.loc[cn.std(1) > 0]
 cn = np.log2(cn.divide(ss.loc[cn.columns, "ploidy"]) + 1)
-cn = cn.dropna(how="all", axis=1)
-cn = cn.fillna(cn.mean())
 LOG.info(f"Copy-Number: {cn.shape}")
 
 wes = wes_obj.filter(subset=samples, min_events=3, recurrence=True)
@@ -150,13 +153,17 @@ plt.close("all")
 # Sample Protein ~ Transcript correlation
 #
 
-s_pg_corr = pd.read_csv(f"{RPATH}/2.SLProteinInteractions_gexp_prot_samples_corr.csv", index_col=0)
+s_pg_corr = pd.read_csv(
+    f"{RPATH}/2.SLProteinInteractions_gexp_prot_samples_corr.csv", index_col=0
+)
 
 
 # PPI
 #
 
-novel_ppis = pd.read_csv(f"{RPATH}/2.SLProteinInteractions.csv.gz").query(f"(prot_fdr < .05) & (prot_corr > 0.5)")
+novel_ppis = pd.read_csv(f"{RPATH}/2.SLProteinInteractions.csv.gz").query(
+    f"(prot_fdr < .05) & (prot_corr > 0.5)"
+)
 
 
 # Factors data-frame integrated with other measurements
@@ -174,7 +181,9 @@ covariates = pd.concat(
         ss.reindex(index=samples, columns=["ploidy", "mutational_burden", "growth"]),
         wes.loc[["TP53"]].T.add_suffix("_wes"),
         prot.loc[["CDH1", "VIM", "BCL2L1"]].T.add_suffix("_proteomics"),
-        gexp_obj.get_data().loc[["CDH1", "VIM", "MCL1", "BCL2L1"]].T.add_suffix("_transcriptomics"),
+        gexp_obj.get_data()
+        .loc[["CDH1", "VIM", "MCL1", "BCL2L1"]]
+        .T.add_suffix("_transcriptomics"),
         methy.loc[["SLC5A1"]].T.add_suffix("_methylation"),
     ],
     axis=1,
@@ -205,36 +214,32 @@ plt.savefig(
 plt.close("all")
 
 
-# # Factor association analysis
-# #
+# Factor association analysis
 #
-# m = LMModels.define_covariates(institute=crispr_obj.merged_institute, cancertype=False, mburden=False, ploidy=False)
-# lmm_crispr = LMModels(y=mofa.factors, x=crispr.T, m=m).matrix_lmm()
-# lmm_crispr.to_csv(
-#     f"{RPATH}/1.MultiOmics_lmm_crispr.csv.gz", index=False, compression="gzip"
-# )
-# print(lmm_crispr.query("fdr < 0.05").head(60))
-#
-# m = LMModels.define_covariates(institute=False, cancertype=False, mburden=False, ploidy=False)
-# lmm_cnv = LMModels(y=mofa.factors, x=cn.T, m=m).matrix_lmm()
-# lmm_cnv.to_csv(
-#     f"{RPATH}/1.MultiOmics_lmm_cnv.csv.gz", index=False, compression="gzip"
-# )
-# print(lmm_cnv.query("fdr < 0.05").head(60))
-#
-# m = LMModels.define_covariates(institute=False, cancertype=False, mburden=False, ploidy=False)
-# lmm_wes = LMModels(y=mofa.factors, x=wes.T, transform_x="none", m=m).matrix_lmm()
-# lmm_wes.to_csv(
-#     f"{RPATH}/1.MultiOmics_lmm_wes.csv.gz", index=False, compression="gzip"
-# )
-# print(lmm_wes.query("fdr < 0.05").head(60))
-#
-# m = LMModels.define_covariates(institute=False, cancertype=False, mburden=False, ploidy=False)
-# lmm_mobems = LMModels(y=mofa.factors, x=mobem.T, transform_x="none", m=m).matrix_lmm()
-# lmm_mobems.to_csv(
-#     f"{RPATH}/1.MultiOmics_lmm_mobems.csv.gz", index=False, compression="gzip"
-# )
-# print(lmm_mobems.query("fdr < 0.05").head(60))
+covs = (
+    LMModels.define_covariates(
+        institute=crispr_obj.merged_institute,
+        medium=True,
+        cancertype=False,
+        tissuetype=True,
+        mburden=False,
+        ploidy=True,
+    )
+    .reindex(crispr.columns)
+    .dropna()
+)
+
+lmm_crispr = LModel(
+    Y=crispr[covs.index].T, X=mofa.factors.loc[covs.index], M=covs
+).fit_matrix()
+print(lmm_crispr.query("fdr < 0.05").head(60))
+
+lmm_mobems = LModel(
+    Y=mofa.factors.loc[covs.index],
+    X=mobem[covs.index].T,
+    M=covs.drop(columns=["Broad", "Sanger"]),
+).fit_matrix()
+print(lmm_mobems.query("fdr < 0.05").head(60))
 
 
 # Factors 1 and 2 associations
@@ -294,59 +299,197 @@ for z in [
     plt.close("all")
 
 
+# Factor 6
 #
+
+f = "F6"
+plot_df = pd.concat(
+    [
+        mofa.factors[[f]],
+        covariates[["gexp_prot_corr", "Proteomics n. measurements"]],
+        ss["tissue"],
+    ],
+    axis=1,
+    sort=False,
+).dropna()
+
+f_enr = mofa.pathway_enrichment(f, views=["proteomics"], genesets=["c5.bp.v7.0.symbols.gmt", "c2.cp.kegg.v7.0.symbols.gmt"])
+f_enr = f_enr.set_index("Term|NES")
+f_enr["index"] = np.arange(f_enr.shape[0])
+
+gs_proteasome = Enrichment.read_signature(
+    f"{DPATH}/pathways/c2.cp.kegg.v7.0.symbols.gmt", "KEGG_PROTEASOME"
+)
+gs_ribosome = Enrichment.read_signature(
+    f"{DPATH}/pathways/c2.cp.kegg.v7.0.symbols.gmt", "KEGG_RIBOSOME"
+)
+gs_translational = Enrichment.read_signature(
+    f"{DPATH}/pathways/c5.bp.v7.0.symbols.gmt",
+    "GO_CYTOPLASMIC_TRANSLATIONAL_INITIATION",
+)
+
 #
+genes_highlight = [
+    "KEGG_PROTEASOME",
+    "GO_CYTOPLASMIC_TRANSLATIONAL_INITIATION",
+    "KEGG_RIBOSOME",
+    "GO_TRANSLATIONAL_INITIATION",
 
-plot_df = pd.concat([
-    gexp.loc["TP53"].rename("gexp"),
-    prot.loc["TP53"].rename("prot"),
-    mobem.loc["TP53_mut"].rename("mutation")
-], axis=1).dropna()
+    "GO_CRISTAE_FORMATION",
+    "KEGG_ECM_RECEPTOR_INTERACTION",
+    "GO_INNER_MITOCHONDRIAL_MEMBRANE_ORGANIZATION",
+    "GO_NADH_DEHYDROGENASE_COMPLEX_ASSEMBLY",
+]
+genes_palette = pd.Series(sns.color_palette("tab20c", n_colors=len(genes_highlight)).as_hex(), index=genes_highlight)
 
-g = GIPlot.gi_regression_marginal("prot", "gexp", "mutation", plot_df)
-g.set_axis_labels(f"TP53 protein", "TP53 gene-expression")
+_, ax = plt.subplots(1, 1, figsize=(3, 2), dpi=600)
+
+ax.scatter(f_enr["index"], f_enr["nes"], c=GIPlot.PAL_DBGD[2], s=5, linewidths=0)
+
+for g in genes_highlight:
+    ax.scatter(
+        f_enr.loc[g, "index"],
+        f_enr.loc[g, "nes"],
+        c=genes_palette[g],
+        s=10,
+        linewidths=0,
+        label=g,
+    )
+
+ax.set_xlabel("Rank of gene-sets")
+ax.set_ylabel(f"Enrichment score (NES)")
+ax.set_title(f"Factor {f[1:]} weights - Proteomics")
+ax.legend(frameon=False, prop={"size": 4})
+ax.grid(True, ls=":", lw=0.1, alpha=1.0, zorder=0, axis="y")
+
+plt.savefig(f"{RPATH}/1.MultiOmics_{f}_ssgsea_waterfall.pdf", bbox_inches="tight")
+plt.close("all")
+
+#
+grid = GIPlot.gi_regression(f, "gexp_prot_corr", plot_df)
+grid.set_axis_labels(f"Factor {f[1:]}", "GExp ~ Prot correlation")
 plt.savefig(
-    f"{RPATH}/prot_gexp_mutation_TP53.png",
+    f"{RPATH}/1.MultiOmics_{f}_gexp_prot_corr_regression.pdf",
+    bbox_inches="tight",
+    transparent=True,
+)
+plt.close("all")
+
+#
+grid = GIPlot.gi_regression(f, "Proteomics n. measurements", plot_df)
+grid.set_axis_labels(f"Factor {f[1:]}", "# measurements")
+plt.savefig(
+    f"{RPATH}/1.MultiOmics_{f}_prot_nmeas_regression.pdf",
+    bbox_inches="tight",
+    transparent=True,
+)
+plt.close("all")
+
+#
+col_colors = CrispyPlot.get_palettes(samples, ss).reindex(plot_df.index)
+col_colors["gexp_prot_corr"] = list(
+    map(matplotlib.colors.rgb2hex, cm.get_cmap("Blues")(plot_df["gexp_prot_corr"]))
+)
+
+MOFAPlot.view_heatmap(
+    mofa,
+    "proteomics",
+    f,
+    n_features=200,
+    col_colors=col_colors,
+    title=f"Proteomics heatmap of Factor{f[1:]} top features",
+)
+plt.savefig(
+    f"{RPATH}/1.MultiOmics_{f}_heatmap_proteomics.png",
+    transparent=True,
+    bbox_inches="tight",
     dpi=600,
+)
+plt.close("all")
+
+#
+for n, gs in [
+    ("Proteasome", gs_proteasome),
+    ("Ribosome", gs_ribosome),
+    ("Translational initiation", gs_translational),
+]:
+    df = pd.concat(
+        [
+            prot.reindex(gs).mean().rename(f"{n}_prot"),
+            gexp.reindex(gs).mean().rename(f"{n}_gexp"),
+            covariates[["gexp_prot_corr", "Proteomics n. measurements"]],
+            mofa.factors[f],
+        ],
+        axis=1,
+    )
+
+    for x_var in [f"{n}_prot", f"{n}_gexp"]:
+        for y_var in ["gexp_prot_corr", "Proteomics n. measurements"]:
+            ax = GIPlot.gi_continuous_plot(
+                x_var, y_var, f, df, cbar_label=f"Factor {f[1:]}"
+            )
+            ax.set_xlabel(f"{n}\n(mean {x_var.split('_')[1]})")
+            ax.set_ylabel(
+                f"Transcript ~ Protein correlation\n(Pearsons'r)"
+                if y_var == "gexp_prot_corr"
+                else "Number of measurements"
+            )
+            plt.savefig(
+                f"{RPATH}/1.MultiOmics_{f}_{n}_{x_var}_{y_var}_continous.pdf",
+                transparent=True,
+                bbox_inches="tight",
+            )
+            plt.close("all")
+
+#
+sb_samples = set(prot).intersection(prot_obj.broad)
+sb_genes = set(prot.index).intersection(prot_obj.broad.index)
+sb_corr = pd.DataFrame(
+    {
+        s: spearmanr(
+            prot.loc[sb_genes, s], prot_obj.broad.loc[sb_genes, s], nan_policy="omit"
+        )
+        for s in sb_samples
+    },
+    index=["corr", "pval"],
+).T
+sb_corr["Factor"] = mofa.factors[f].loc[sb_samples]
+sb_corr["gexp_prot_corr"] = plot_df["gexp_prot_corr"].reindex(sb_corr.index)
+
+ax = GIPlot.gi_continuous_plot(
+    "corr", "gexp_prot_corr", "Factor", sb_corr, cbar_label=f"Factor {f[1:]}"
+)
+ax.set_xlabel("Same cell line correlation\nwith CCLE proteomics (Spearman's)")
+ax.set_ylabel(f"Transcript ~ Protein correlation\n(Pearsons'r)")
+plt.savefig(
+    f"{RPATH}/1.MultiOmics_{f}_factor_corr_broad_regression.pdf",
+    bbox_inches="tight",
+    transparent=True,
+)
+plt.close("all")
+
+# Tissue plot
+df = pd.concat([
+    mofa.factors[["F1", "F2", "F6"]],
+    covariates["gexp_prot_corr"],
+], axis=1)
+
+ax = GIPlot.gi_continuous_plot("F1", "F2", f, df, cbar_label=f"Factor {f[1:]}")
+ax.set_xlabel(f"Factor F1")
+ax.set_ylabel(f"Factor F2")
+plt.savefig(
+    f"{RPATH}/1.MultiOmics_{f}_F1_F2_continous.pdf",
     transparent=True,
     bbox_inches="tight",
 )
 plt.close("all")
 
-
-plot_df = pd.concat([
-    gexp.loc["TP53"].rename("gexp"),
-    prot.loc["TP53"].rename("prot"),
-    drespo.loc["1047;Nutlin-3a (-);GDSC2"].rename("drug"),
-], axis=1).dropna()
-
-ax = GIPlot.gi_continuous_plot("prot", "gexp", "drug", plot_df, cbar_label="Nutlin-3a IC50")
-ax.set_xlabel("TP53 protein")
-ax.set_ylabel("TP53 gene-expression")
+ax = GIPlot.gi_continuous_plot("F1", "F2", "gexp_prot_corr", df, cbar_label=f"Transcript ~ Protein correlation")
+ax.set_xlabel(f"Factor F1")
+ax.set_ylabel(f"Factor F2")
 plt.savefig(
-    f"{RPATH}/prot_gexp_drug_TP53.png",
-    dpi=600,
+    f"{RPATH}/1.MultiOmics_gexp_prot_corr_F1_F2_continous.pdf",
     transparent=True,
     bbox_inches="tight",
 )
 plt.close("all")
-
-
-
-plot_df = pd.concat([
-    gexp.loc["TP53"].rename("gexp"),
-    prot.loc["TP53"].rename("prot"),
-    crispr.loc["TP53"].rename("crispr"),
-], axis=1).dropna()
-
-ax = GIPlot.gi_continuous_plot("prot", "gexp", "crispr", plot_df, cbar_label="CRISPR log2 FC")
-ax.set_xlabel("TP53 protein")
-ax.set_ylabel("TP53 gene-expression")
-plt.savefig(
-    f"{RPATH}/prot_gexp_crispr_TP53.png",
-    dpi=600,
-    transparent=True,
-    bbox_inches="tight",
-)
-plt.close("all")
-

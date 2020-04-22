@@ -112,22 +112,22 @@ novel_ppis = ppis.query(f"(prot_fdr < .05) & (prot_corr > 0.5)")
 dcrispr = pd.read_excel(f"{DPATH}/Significant Drug CRISPR Dataset EV5.xlsx", sheet_name="Dataset EV5")
 
 
-# MOFA factors
+# # MOFA factors
+# #
 #
-
-mofa_factors, mofa_weights, mofa_rsquare = MOFA.read_mofa_hdf5(f"{RPATH}/1.MultiOmics.hdf5")
-
+# mofa_factors, mofa_weights, mofa_rsquare = MOFA.read_mofa_hdf5(f"{RPATH}/1.MultiOmics.hdf5")
+#
 
 # Subtypes
 #
 
-pam50 = pd.read_csv(f"{DPATH}/breast_pam50.csv").set_index("model_id")
+breast_subtypes = pd.read_csv(f"{DPATH}/breast_subtypes.txt", sep="\t").set_index("model_id")
 
 
 # GI list
 #
 
-sl_lm = pd.read_csv(f"{RPATH}/lm_sklearn_protein_crispr.csv.gz").dropna()
+sl_lm = pd.read_csv(f"{RPATH}/lm_sklearn_protein_crispr.csv.gz").query("fdr < .1").dropna()
 
 # CORUM
 sl_lm["corum"] = [
@@ -367,10 +367,13 @@ gi_pairs = [
     ("HNRNPH1", "HNRNPH1"),
     ("PRKAR1A", "PRKAR1A"),
     ("BSG", "FOXA1"),
+    ("TMED1", "SLC16A1"),
+    ("EPHX1", "NFE2L2"),
+    ("TOR1AIP2", "YAP1"),
 ]
 
-# p, c = "CRTAP", "FOXA1"
 for p, c in gi_pairs:
+    # p, c = "GPAA1", "TTC4"
     plot_df = pd.concat(
         [
             crispr.loc[[c]].T.add_suffix("_crispr"),
@@ -417,7 +420,6 @@ plot_df = pd.concat(
         gexp.loc[[p]].T.add_suffix("_gexp"),
         prot_obj.broad.loc[[p, "SLC16A1"]].T.add_suffix("_broad"),
         ss["tissue"],
-        pam50[["PAM50", "Jiang_et_al"]],
     ],
     axis=1,
     sort=False,
@@ -447,12 +449,13 @@ plt.savefig(
 plt.close("all")
 
 #
-pam50s = ["PAM50", "Jiang_et_al"]
-huetypes = set(plot_df[pam50s[0]].dropna())
-palette = pd.Series(sns.color_palette("Set1", n_colors=len(huetypes)).as_hex(), index=huetypes)
-df = plot_df.dropna(subset=pam50s)
-for ptype in pam50s:
-    GIPlot.gi_classification(f"{c}_crispr", ptype, df, palette=palette.to_dict(), orient="h", notch=False, order=huetypes)
+for ptype in ["pam50", "ER", "PR", "HER2", "Phenotype", "p53", "BRCA1", "BRCA2", "PIK3CA", "PTEN"]:
+    df = pd.concat([plot_df[f"{c}_crispr"], breast_subtypes[ptype]], axis=1).dropna()
+
+    order = set(df[ptype])
+    palette = pd.Series(sns.color_palette("Set1", n_colors=len(order)).as_hex(), index=order)
+
+    GIPlot.gi_classification(f"{c}_crispr", ptype, df, palette=palette.to_dict(), orient="h", notch=False, order=order)
     plt.savefig(
         f"{RPATH}/2.SL_PAM50_{ptype}_{c}_boxplot.pdf",
         transparent=True,

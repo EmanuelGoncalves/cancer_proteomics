@@ -18,7 +18,7 @@
 # %load_ext autoreload
 # %autoreload 2
 
-import os
+import gseapy
 import logging
 import matplotlib
 import numpy as np
@@ -29,19 +29,17 @@ import matplotlib.pyplot as plt
 from matplotlib import cm
 from Enrichment import Enrichment
 from crispy.GIPlot import GIPlot
-from scipy.stats import spearmanr, ttest_ind
+from scipy.stats import spearmanr
 from crispy.MOFA import MOFA, MOFAPlot
 from crispy.CrispyPlot import CrispyPlot
 from cancer_proteomics.eg.LMModels import LMModels
 from cancer_proteomics.eg.SLinteractionsSklearn import LModel
-from crispy.DimensionReduction import dim_reduction, plot_dim_reduction
 from crispy.DataImporter import (
     Proteomics,
     GeneExpression,
     Methylation,
     CopyNumber,
     CRISPR,
-    Sample,
     DrugResponse,
     WES,
     Mobem,
@@ -85,20 +83,18 @@ LOG.info(f"Samples: {len(samples)}")
 prot = prot_obj.filter(subset=samples)
 LOG.info(f"Proteomics: {prot.shape}")
 
-gexp = gexp_obj.filter(subset=samples)
-gexp = gexp.loc[gexp.std(1) > 1]
+gexp_all = gexp_obj.filter(subset=samples)
+gexp = gexp_all.loc[gexp_all.std(1) > 1]
 LOG.info(f"Transcriptomics: {gexp.shape}")
 
-methy = methy_obj.filter(subset=samples)
-methy = methy.loc[methy.std(1) > 0.05]
+methy_all = methy_obj.filter(subset=samples)
+methy = methy_all.loc[methy_all.std(1) > 0.05]
 LOG.info(f"Methylation: {methy.shape}")
 
 crispr = crispr_obj.filter(subset=samples, dtype="merged")
 LOG.info(f"CRISPR: {crispr.shape}")
 
-drespo = drug_obj.filter(
-    subset=samples, filter_max_concentration=True, filter_combinations=True
-)
+drespo = drug_obj.filter(subset=samples)
 drespo = drespo.set_index(pd.Series([";".join(map(str, i)) for i in drespo.index]))
 LOG.info(f"Drug response: {drespo.shape}")
 
@@ -116,6 +112,70 @@ mobem = mobem.loc[mobem.std(1) > 0]
 LOG.info(f"MOBEM: {mobem.shape}")
 
 
+# Sample Protein ~ Transcript correlation
+#
+
+s_pg_corr = pd.read_csv(
+    f"{RPATH}/2.SLProteinInteractions_gexp_prot_samples_corr.csv", index_col=0
+)
+
+samples_broad = set(prot_obj.broad).intersection(gexp_all)
+genes_broad = set(prot_obj.broad.index).intersection(gexp_all.index)
+s_pg_corr_broad = pd.DataFrame(
+    {
+        s: spearmanr(
+            prot_obj.broad.reindex(index=genes_broad)[s],
+            gexp.reindex(index=genes_broad)[s],
+            nan_policy="omit",
+        )
+        for s in samples_broad
+    },
+    index=["corr", "pvalue"],
+).T
+
+samples_bsc = set(prot).intersection(prot_obj.broad)
+genes_bsc = set(prot.index).intersection(prot_obj.broad.index)
+bsc_corr = pd.DataFrame(
+    {
+        s: spearmanr(
+            prot.loc[genes_bsc, s], prot_obj.broad.loc[genes_bsc, s], nan_policy="omit"
+        )
+        for s in samples_bsc
+    },
+    index=["corr", "pval"],
+).T
+
+
+# Covariates
+#
+
+covariates = pd.concat(
+    [
+        prot.count().pipe(np.log2).rename("NProteinsSanger&CMRI"),
+        prot_obj.broad.count().pipe(np.log2).rename("NProteinsBroad"),
+        prot_obj.reps.rename("RepsCorrelationSanger&CMRI"),
+        prot_obj.protein_raw.median().rename("Global proteomics"),
+
+        s_pg_corr["corr"].rename("GExpProtCorrSanger&CMRI"),
+        s_pg_corr_broad["corr"].rename("GExpProtCorrBroad"),
+        bsc_corr["corr"].rename("SamplesOverlapCorr"),
+
+        methy.mean().rename("Global methylation"),
+
+        pd.get_dummies(ss["msi_status"]),
+        pd.get_dummies(ss["growth_properties"]),
+        pd.get_dummies(ss["tissue"])["Haematopoietic and Lymphoid"],
+        ss.reindex(index=samples, columns=["ploidy", "mutational_burden", "growth"]),
+
+        wes.loc[["TP53"]].T.add_suffix("_wes"),
+        prot.loc[["CDH1", "VIM", "BCL2L1"]].T.add_suffix("_proteomics"),
+        gexp_obj.get_data().loc[["CDH1", "VIM", "MCL1", "BCL2L1"]].T.add_suffix("_transcriptomics"),
+        methy.loc[["SLC5A1"]].T.add_suffix("_methylation"),
+    ],
+    axis=1,
+)
+
+
 # MOFA
 #
 
@@ -126,370 +186,386 @@ groupby = ss.loc[samples, "tissue"].apply(
 mofa = MOFA(
     views=dict(proteomics=prot, transcriptomics=gexp, methylation=methy, drespo=drespo),
     groupby=groupby,
+    covariates=dict(
+        proteomics=covariates[["NProteinsSanger&CMRI", "RepsCorrelationSanger&CMRI"]],
+        methylation=covariates[["Global methylation"]],
+    ),
     iterations=2000,
     use_overlap=True,
-    convergence_mode="fast",
-    factors_n=30,
-    from_file=f"{RPATH}/1.MultiOmics.hdf5",
+    convergence_mode="slow",
+    factors_n=10,
+    from_file=f"{RPATH}/1.MultiOmics_Sanger&CMRI.hdf5",
 )
 
-
-# Factor clustermap
-#
-
-MOFAPlot.factors_corr_clustermap(mofa)
-plt.savefig(f"{RPATH}/1.MultiOmics_factors_corr_clustermap.pdf", bbox_inches="tight")
-plt.close("all")
-
-
-# Variance explained across data-sets
-#
-
-MOFAPlot.variance_explained_heatmap(mofa)
-plt.savefig(f"{RPATH}/1.MultiOmics_rsquared_heatmap.pdf", bbox_inches="tight")
-plt.close("all")
-
-
-# Sample Protein ~ Transcript correlation
-#
-
-s_pg_corr = pd.read_csv(
-    f"{RPATH}/2.SLProteinInteractions_gexp_prot_samples_corr.csv", index_col=0
+groupby_broad = ss.loc[samples_broad, "tissue"].apply(
+    lambda v: "Haem" if v == "Haematopoietic and Lymphoid" else "Other"
 )
 
-
-# PPI
-#
-
-novel_ppis = pd.read_csv(f"{RPATH}/2.SLProteinInteractions.csv.gz").query(
-    f"(prot_fdr < .05) & (prot_corr > 0.5)"
+mofa_broad = MOFA(
+    views=dict(
+        proteomics=prot_obj.broad[samples_broad],
+        transcriptomics=gexp_all[samples_broad],
+        methylation=methy[samples_broad],
+        drespo=drespo[samples_broad],
+    ),
+    groupby=groupby_broad,
+    covariates=dict(
+        proteomics=covariates[["NProteinsSanger&CMRI", "RepsCorrelationSanger&CMRI"]],
+        methylation=covariates[["Global methylation"]],
+    ),
+    iterations=2000,
+    use_overlap=True,
+    convergence_mode="slow",
+    factors_n=10,
+    from_file=f"{RPATH}/1.MultiOmics_Broad.hdf5",
 )
-
 
 # Factors data-frame integrated with other measurements
 #
 
-covariates = pd.concat(
-    [
-        prot.count().rename("Proteomics n. measurements"),
-        prot_obj.protein_raw.median().rename("Global proteomics"),
-        methy.mean().rename("Global methylation"),
-        s_pg_corr["corr"].rename("gexp_prot_corr"),
-        pd.get_dummies(ss["msi_status"]),
-        pd.get_dummies(ss["growth_properties"]),
-        pd.get_dummies(ss["tissue"])["Haematopoietic and Lymphoid"],
-        ss.reindex(index=samples, columns=["ploidy", "mutational_burden", "growth"]),
-        wes.loc[["TP53"]].T.add_suffix("_wes"),
-        prot.loc[["CDH1", "VIM", "BCL2L1"]].T.add_suffix("_proteomics"),
-        gexp_obj.get_data()
-        .loc[["CDH1", "VIM", "MCL1", "BCL2L1"]]
-        .T.add_suffix("_transcriptomics"),
-        methy.loc[["SLC5A1"]].T.add_suffix("_methylation"),
-    ],
-    axis=1,
-).reindex(mofa.factors.index)
-
-covariates_corr = pd.DataFrame(
-    {
-        f: {
-            c: spearmanr(mofa.factors[f], covariates[c], nan_policy="omit")[0]
-            for c in covariates
+for n, n_factors in [("Sanger&CMRI", mofa), ("Broad", mofa_broad)]:
+    n_factors_corr = pd.DataFrame(
+        {
+            f: {
+                c: spearmanr(
+                    n_factors.factors[f],
+                    covariates.reindex(n_factors.factors.index)[c],
+                    nan_policy="omit",
+                )[0]
+                for c in covariates
+            }
+            for f in n_factors.factors
         }
-        for f in mofa.factors
-    }
-)
+    )
 
-covariates_df = pd.concat([covariates, mofa.factors], axis=1, sort=False)
+    # Factor clustermap
+    MOFAPlot.factors_corr_clustermap(n_factors)
+    plt.savefig(
+        f"{RPATH}/1.MultiOmics_factors_corr_clustermap_{n}.pdf", bbox_inches="tight"
+    )
+    plt.close("all")
 
+    # Variance explained across data-sets
+    MOFAPlot.variance_explained_heatmap(n_factors)
+    plt.savefig(
+        f"{RPATH}/1.MultiOmics_factors_rsquared_heatmap_{n}.pdf", bbox_inches="tight"
+    )
+    plt.close("all")
 
-# Covairates correlation heatmap
-#
-
-MOFAPlot.covariates_heatmap(covariates_corr, mofa)
-plt.savefig(
-    f"{RPATH}/1.MultiOmics_factors_covariates_clustermap.pdf",
-    bbox_inches="tight",
-    transparent=True,
-)
-plt.close("all")
+    # Covairates correlation heatmap
+    axs = MOFAPlot.covariates_heatmap(n_factors_corr, n_factors)
+    axs[0].set_title(f"Variance explained per factor - {n}")
+    plt.savefig(
+        f"{RPATH}/1.MultiOmics_factors_covariates_clustermap_{n}.pdf",
+        bbox_inches="tight",
+        transparent=True,
+    )
+    plt.close("all")
 
 
 # Factor association analysis
 #
-covs = (
-    LMModels.define_covariates(
-        institute=crispr_obj.merged_institute,
-        medium=True,
-        cancertype=False,
-        tissuetype=True,
-        mburden=False,
-        ploidy=True,
-    )
-    .reindex(crispr.columns)
-    .dropna()
-)
 
+covs = LMModels.define_covariates(
+    institute=crispr_obj.merged_institute,
+    medium=True,
+    cancertype=False,
+    tissuetype=False,
+    mburden=False,
+    ploidy=False,
+)
+covs = pd.concat([covs, np.log(covariates["NProteinsSanger&CMRI"]), covariates["RepsCorrelationSanger&CMRI"]], axis=1)
+covs = covs.reindex(crispr.columns).dropna()
+
+# Sanger & CMRI
 lmm_crispr = LModel(
     Y=crispr[covs.index].T, X=mofa.factors.loc[covs.index], M=covs
 ).fit_matrix()
-print(lmm_crispr.query("fdr < 0.05").head(60))
+print(lmm_crispr.query("fdr < 0.1").head(60))
 
-lmm_mobems = LModel(
-    Y=mofa.factors.loc[covs.index],
-    X=mobem[covs.index].T,
-    M=covs.drop(columns=["Broad", "Sanger"]),
+# Broad
+mbroad_samples = (
+    set(covs.index).intersection(crispr).intersection(mofa_broad.factors.index)
+)
+covs = pd.concat(
+    [covs.drop(columns=["NProteinsSanger&CMRI", "RepsCorrelationSanger&CMRI"]), np.log(covariates["NProteinsBroad"])],
+    axis=1,
+)
+covs = covs.reindex(mbroad_samples).dropna()
+
+lmm_crispr_broad = LModel(
+    Y=crispr[mbroad_samples].T,
+    X=mofa_broad.factors.loc[mbroad_samples],
+    M=covs.loc[mbroad_samples],
 ).fit_matrix()
-print(lmm_mobems.query("fdr < 0.05").head(60))
+print(lmm_crispr_broad.query("fdr < 0.1").head(60))
 
 
-# Factors 1 and 2 associations
+# Factor 1 and 2
 #
 
-f_x, f_y = "F1", "F2"
-plot_df = pd.concat(
-    [
-        mofa.factors[[f_x, f_y]],
-        gexp.loc[["CDH1", "VIM"]].T.add_suffix("_transcriptomics"),
-        prot.loc[["VIM"]].T.add_suffix("_proteomics"),
-        mofa.views["methylation"].loc[["PTPRT"]].T.add_suffix("_methylation"),
-        ss["tissue"],
-    ],
-    axis=1,
-    sort=False,
-).dropna()
+for n, n_factors in [("Sanger&CMRI", mofa), ("Broad", mofa_broad)]:
+    f_x, f_y = "F1", "F2"
+    plot_df = pd.concat(
+        [
+            n_factors.factors[[f_x, f_y]],
+            gexp.loc[["CDH1", "VIM"]].T.add_suffix("_transcriptomics"),
+            prot.loc[["VIM"]].T.add_suffix("_proteomics"),
+            ss["tissue"],
+        ],
+        axis=1,
+        sort=False,
+    ).dropna()
 
-# Regression plots
-for f in [f_x, f_y]:
-    for v in ["CDH1_transcriptomics", "VIM_transcriptomics", "VIM_proteomics"]:
-        grid = GIPlot.gi_regression(f, v, plot_df)
-        grid.set_axis_labels(f"Factor {f[1:]}", v.replace("_", " "))
-        plt.savefig(
-            f"{RPATH}/1.MultiOmics_{f}_{v}_regression.pdf",
-            bbox_inches="tight",
-            transparent=True,
-        )
-        plt.close("all")
+    # Regression plots
+    for f in [f_x, f_y]:
+        for v in ["CDH1_transcriptomics", "VIM_transcriptomics", "VIM_proteomics"]:
+            grid = GIPlot.gi_regression(f, v, plot_df)
+            grid.set_axis_labels(f"Factor {f[1:]}", v.replace("_", " "))
+            plt.savefig(
+                f"{RPATH}/1.MultiOmics_{f}_{v}_regression_{n}.pdf",
+                bbox_inches="tight",
+                transparent=True,
+            )
+            plt.close("all")
 
-# Tissue plot
-ax = GIPlot.gi_tissue_plot(f_x, f_y, plot_df)
-ax.set_xlabel(f"Factor {f_x[1:]}")
-ax.set_ylabel(f"Factor {f_y[1:]}")
-plt.savefig(
-    f"{RPATH}/1.MultiOmics_{f_x}_{f_y}_tissue_plot.pdf",
-    transparent=True,
-    bbox_inches="tight",
-)
-plt.close("all")
-
-# Continous annotation
-for z in [
-    "VIM_proteomics",
-    "VIM_transcriptomics",
-    "CDH1_transcriptomics",
-    "PTPRT_methylation",
-]:
-    ax = GIPlot.gi_continuous_plot(f_x, f_y, z, plot_df, cbar_label=z.replace("_", " "))
+    # Tissue plot
+    ax = GIPlot.gi_tissue_plot(f_x, f_y, plot_df, plot_reg=False)
     ax.set_xlabel(f"Factor {f_x[1:]}")
     ax.set_ylabel(f"Factor {f_y[1:]}")
     plt.savefig(
-        f"{RPATH}/1.MultiOmics_{f_x}_{f_y}_continous{z}.pdf",
+        f"{RPATH}/1.MultiOmics_{f_x}_{f_y}_tissue_plot_{n}.pdf",
         transparent=True,
         bbox_inches="tight",
     )
     plt.close("all")
 
+    # Continous annotation
+    for z in [
+        "VIM_proteomics",
+    ]:
+        ax = GIPlot.gi_continuous_plot(f_x, f_y, z, plot_df, cbar_label=z.replace("_", " "))
+        ax.set_xlabel(f"Factor {f_x[1:]}")
+        ax.set_ylabel(f"Factor {f_y[1:]}")
+        plt.savefig(
+            f"{RPATH}/1.MultiOmics_{f_x}_{f_y}_continous_{z}_{n}.pdf",
+            transparent=True,
+            bbox_inches="tight",
+        )
+        plt.close("all")
+
 
 # Factor 6
 #
+f, f_broad = "F6", "F7"
 
-f = "F6"
-plot_df = pd.concat(
+factor_df = pd.concat(
     [
-        mofa.factors[[f]],
-        covariates[["gexp_prot_corr", "Proteomics n. measurements"]],
+        mofa.factors[f].rename("f"),
+        mofa_broad.factors[f_broad].rename("f_broad"),
+        covariates[
+            [
+                "NProteinsSanger&CMRI",
+                "NProteinsBroad",
+                "GExpProtCorrSanger&CMRI",
+                "GExpProtCorrBroad",
+            ]
+        ],
         ss["tissue"],
     ],
     axis=1,
     sort=False,
+).dropna(subset=["f"])
+
+# Protein attenuation correlation between institutes
+for x_var, y_var in [
+    ("GExpProtCorrSanger&CMRI", "GExpProtCorrBroad"),
+    ("f", f"f_broad"),
+]:
+    plot_df = factor_df[[x_var, y_var]].dropna()
+
+    grid = GIPlot.gi_regression(x_var, y_var, plot_df)
+    grid.set_axis_labels(x_var, y_var)
+    plt.savefig(
+        f"{RPATH}/1.MultiOmics_{f}_{x_var}_{y_var}.pdf",
+        bbox_inches="tight",
+        transparent=True,
+    )
+    plt.close("all")
+
+# Factor correlation
+for x_var in ["f", f"f_broad"]:
+    for y_var in [
+        "NProteinsSanger&CMRI",
+        "NProteinsBroad",
+        "GExpProtCorrSanger&CMRI",
+        "GExpProtCorrBroad",
+    ]:
+        grid = GIPlot.gi_regression(
+            x_var, y_var, factor_df.dropna(subset=[x_var, y_var])
+        )
+        plt.savefig(
+            f"{RPATH}/1.MultiOmics_{f}_corr_{x_var}_{y_var}.pdf",
+            bbox_inches="tight",
+            transparent=True,
+        )
+        plt.close("all")
+
+# Pathway enrichment heatmap
+for n, n_factors, factor in [("Sanger&CMRI", mofa, f), ("Broad", mofa_broad, f_broad)]:
+    col_colors = CrispyPlot.get_palettes(samples, ss).reindex(n_factors.factors.index)
+    col_colors[f"GExpProtCorr{n}"] = list(
+        map(
+            matplotlib.colors.rgb2hex,
+            cm.get_cmap("Blues")(
+                factor_df.reindex(col_colors.index)[f"GExpProtCorr{n}"]
+            ),
+        )
+    )
+
+    n_features = 200
+
+    MOFAPlot.view_heatmap(
+        n_factors,
+        "proteomics",
+        factor,
+        center=False,
+        standard_scale=0,
+        n_features=n_features,
+        col_colors=col_colors,
+        title=f"Proteomics {n} heatmap of Factor{f[1:]} top {n_features} features",
+    )
+    plt.savefig(
+        f"{RPATH}/1.MultiOmics_{f}_heatmap_proteomics_{n}.png",
+        transparent=True,
+        bbox_inches="tight",
+        dpi=600,
+    )
+    plt.close("all")
+
+# Pathway enrichment
+factor_enr = mofa.pathway_enrichment(
+    f,
+    views=["proteomics"],
+    # genesets=["c5.bp.v7.0.symbols.gmt", "c2.cp.kegg.v7.0.symbols.gmt"],
+).set_index("Term|NES")
+
+factor_enr_broad = mofa_broad.pathway_enrichment(
+    f_broad,
+    views=["proteomics"],
+    # genesets=["c5.bp.v7.0.symbols.gmt", "c2.cp.kegg.v7.0.symbols.gmt"],
+).set_index("Term|NES")
+
+# Plot
+plot_df = pd.concat(
+    [factor_enr["nes"].rename("Sanger&CMRI"), factor_enr_broad["nes"].rename("Broad")],
+    axis=1,
 ).dropna()
+plot_df.index = [" ".join(i.split("_")[1:]) for i in plot_df.index]
 
-f_enr = mofa.pathway_enrichment(f, views=["proteomics"], genesets=["c5.bp.v7.0.symbols.gmt", "c2.cp.kegg.v7.0.symbols.gmt"])
-f_enr = f_enr.set_index("Term|NES")
-f_enr["index"] = np.arange(f_enr.shape[0])
-
-gs_proteasome = Enrichment.read_signature(
-    f"{DPATH}/pathways/c2.cp.kegg.v7.0.symbols.gmt", "KEGG_PROTEASOME"
+gs_up = plot_df[(plot_df["Sanger&CMRI"] > 0.2) & (plot_df["Broad"] < -0.2)].sort_values(
+    "Sanger&CMRI", ascending=False
 )
-gs_ribosome = Enrichment.read_signature(
-    f"{DPATH}/pathways/c2.cp.kegg.v7.0.symbols.gmt", "KEGG_RIBOSOME"
+gs_dw = plot_df[(plot_df["Sanger&CMRI"] < -0.2) & (plot_df["Broad"] > 0.4)].sort_values(
+    "Sanger&CMRI"
 )
-gs_translational = Enrichment.read_signature(
-    f"{DPATH}/pathways/c5.bp.v7.0.symbols.gmt",
-    "GO_CYTOPLASMIC_TRANSLATIONAL_INITIATION",
+gs_highlight = list(gs_up.index) + list(gs_dw.index)
+
+gs_palette = pd.Series(
+    sns.light_palette("#3182bd", n_colors=len(gs_up) + 1, reverse=True).as_hex()[:-1]
+    + sns.light_palette("#e6550d", n_colors=len(gs_dw) + 1, reverse=True).as_hex()[:-1],
+    index=gs_highlight,
 )
 
-#
-genes_highlight = [
-    "KEGG_PROTEASOME",
-    "GO_CYTOPLASMIC_TRANSLATIONAL_INITIATION",
-    "KEGG_RIBOSOME",
-    "GO_TRANSLATIONAL_INITIATION",
+_, ax = plt.subplots(1, 1, figsize=(3, 3), dpi=600)
 
-    "GO_CRISTAE_FORMATION",
-    "KEGG_ECM_RECEPTOR_INTERACTION",
-    "GO_INNER_MITOCHONDRIAL_MEMBRANE_ORGANIZATION",
-    "GO_NADH_DEHYDROGENASE_COMPLEX_ASSEMBLY",
-]
-genes_palette = pd.Series(sns.color_palette("tab20c", n_colors=len(genes_highlight)).as_hex(), index=genes_highlight)
+ax.scatter(
+    plot_df["Broad"], plot_df["Sanger&CMRI"], c=GIPlot.PAL_DBGD[2], s=5, linewidths=0
+)
 
-_, ax = plt.subplots(1, 1, figsize=(3, 2), dpi=600)
-
-ax.scatter(f_enr["index"], f_enr["nes"], c=GIPlot.PAL_DBGD[2], s=5, linewidths=0)
-
-for g in genes_highlight:
+for g in gs_highlight:
     ax.scatter(
-        f_enr.loc[g, "index"],
-        f_enr.loc[g, "nes"],
-        c=genes_palette[g],
+        plot_df.loc[g, "Broad"],
+        plot_df.loc[g, "Sanger&CMRI"],
+        c=gs_palette[g],
         s=10,
         linewidths=0,
         label=g,
     )
 
-ax.set_xlabel("Rank of gene-sets")
-ax.set_ylabel(f"Enrichment score (NES)")
-ax.set_title(f"Factor {f[1:]} weights - Proteomics")
-ax.legend(frameon=False, prop={"size": 4})
-ax.grid(True, ls=":", lw=0.1, alpha=1.0, zorder=0, axis="y")
+cor, pval = spearmanr(plot_df["Broad"], plot_df["Sanger&CMRI"])
+annot_text = f"Spearman's R={cor:.2g}, p-value={pval:.1e}"
+ax.text(0.98, 0.02, annot_text, fontsize=4, transform=ax.transAxes, ha="right")
 
-plt.savefig(f"{RPATH}/1.MultiOmics_{f}_ssgsea_waterfall.pdf", bbox_inches="tight")
+ax.set_ylabel("Sanger&CMRI")
+ax.set_xlabel(f"Broad")
+ax.set_title(f"Factor {f[1:]} Proteomics weights enrichment score (NES)")
+ax.legend(frameon=False, prop={"size": 4}, loc="center left", bbox_to_anchor=(1, 0.5))
+ax.grid(True, ls=":", lw=0.1, alpha=1.0, zorder=0)
+plt.savefig(f"{RPATH}/1.MultiOmics_{f}_ssgsea_enrichments.pdf", bbox_inches="tight")
 plt.close("all")
 
-#
-grid = GIPlot.gi_regression(f, "gexp_prot_corr", plot_df)
-grid.set_axis_labels(f"Factor {f[1:]}", "GExp ~ Prot correlation")
-plt.savefig(
-    f"{RPATH}/1.MultiOmics_{f}_gexp_prot_corr_regression.pdf",
-    bbox_inches="tight",
-    transparent=True,
-)
-plt.close("all")
-
-#
-grid = GIPlot.gi_regression(f, "Proteomics n. measurements", plot_df)
-grid.set_axis_labels(f"Factor {f[1:]}", "# measurements")
-plt.savefig(
-    f"{RPATH}/1.MultiOmics_{f}_prot_nmeas_regression.pdf",
-    bbox_inches="tight",
-    transparent=True,
-)
-plt.close("all")
-
-#
-col_colors = CrispyPlot.get_palettes(samples, ss).reindex(plot_df.index)
-col_colors["gexp_prot_corr"] = list(
-    map(matplotlib.colors.rgb2hex, cm.get_cmap("Blues")(plot_df["gexp_prot_corr"]))
-)
-
-MOFAPlot.view_heatmap(
-    mofa,
-    "proteomics",
-    f,
-    n_features=200,
-    col_colors=col_colors,
-    title=f"Proteomics heatmap of Factor{f[1:]} top features",
-)
-plt.savefig(
-    f"{RPATH}/1.MultiOmics_{f}_heatmap_proteomics.png",
-    transparent=True,
-    bbox_inches="tight",
-    dpi=600,
-)
-plt.close("all")
-
-#
-for n, gs in [
-    ("Proteasome", gs_proteasome),
-    ("Ribosome", gs_ribosome),
-    ("Translational initiation", gs_translational),
+# Plot genesets mean values
+for gs in [
+    "KEGG_PENTOSE_PHOSPHATE_PATHWAY",
+    "KEGG_RIBOSOME",
+    "HALLMARK_PI3K_AKT_MTOR_SIGNALING",
+    "GO_MITOCHONDRIAL_TRANSLATIONAL_TERMINATION",
 ]:
-    df = pd.concat(
+    gs_genes = Enrichment.signature(gs)
+
+    y_vars = ["GExpProtCorrSanger&CMRI", "GExpProtCorrBroad"]
+
+    gs_df = pd.concat(
         [
-            prot.reindex(gs).mean().rename(f"{n}_prot"),
-            gexp.reindex(gs).mean().rename(f"{n}_gexp"),
-            covariates[["gexp_prot_corr", "Proteomics n. measurements"]],
+            prot.reindex(gs_genes).mean().rename(f"Proteomics Sanger&CMRI"),
+            prot_obj.broad.reindex(gs_genes).mean().rename(f"Proteomics Broad"),
+            covariates[y_vars],
             mofa.factors[f],
         ],
         axis=1,
     )
 
-    for x_var in [f"{n}_prot", f"{n}_gexp"]:
-        for y_var in ["gexp_prot_corr", "Proteomics n. measurements"]:
+    for x_var in ["Proteomics Sanger&CMRI", "Proteomics Broad"]:
+        for y_var in y_vars:
             ax = GIPlot.gi_continuous_plot(
-                x_var, y_var, f, df, cbar_label=f"Factor {f[1:]}"
+                x_var,
+                y_var,
+                f,
+                gs_df.dropna(subset=[x_var, y_var, f]),
+                cbar_label=f"Factor {f[1:]}",
+                plot_reg=True,
             )
-            ax.set_xlabel(f"{n}\n(mean {x_var.split('_')[1]})")
-            ax.set_ylabel(
-                f"Transcript ~ Protein correlation\n(Pearsons'r)"
-                if y_var == "gexp_prot_corr"
-                else "Number of measurements"
-            )
+            ax.set_xlabel(f"{x_var}")
+            ax.set_ylabel(f"{y_var}")
+            ax.set_title(gs)
             plt.savefig(
-                f"{RPATH}/1.MultiOmics_{f}_{n}_{x_var}_{y_var}_continous.pdf",
+                f"{RPATH}/1.MultiOmics_{f}_{gs}_{x_var}_{y_var}_continous.pdf",
                 transparent=True,
                 bbox_inches="tight",
             )
             plt.close("all")
 
-#
-sb_samples = set(prot).intersection(prot_obj.broad)
-sb_genes = set(prot.index).intersection(prot_obj.broad.index)
-sb_corr = pd.DataFrame(
-    {
-        s: spearmanr(
-            prot.loc[sb_genes, s], prot_obj.broad.loc[sb_genes, s], nan_policy="omit"
-        )
-        for s in sb_samples
-    },
-    index=["corr", "pval"],
-).T
-sb_corr["Factor"] = mofa.factors[f].loc[sb_samples]
-sb_corr["gexp_prot_corr"] = plot_df["gexp_prot_corr"].reindex(sb_corr.index)
-
-ax = GIPlot.gi_continuous_plot(
-    "corr", "gexp_prot_corr", "Factor", sb_corr, cbar_label=f"Factor {f[1:]}"
+# Samples correlation vs attenuation
+plot_df = pd.concat(
+    [
+        bsc_corr,
+        factor_df[["f", "f_broad", "GExpProtCorrSanger&CMRI", "GExpProtCorrBroad"]],
+    ],
+    axis=1,
 )
-ax.set_xlabel("Same cell line correlation\nwith CCLE proteomics (Spearman's)")
-ax.set_ylabel(f"Transcript ~ Protein correlation\n(Pearsons'r)")
-plt.savefig(
-    f"{RPATH}/1.MultiOmics_{f}_factor_corr_broad_regression.pdf",
-    bbox_inches="tight",
-    transparent=True,
-)
-plt.close("all")
 
-# Tissue plot
-df = pd.concat([
-    mofa.factors[["F1", "F2", "F6"]],
-    covariates["gexp_prot_corr"],
-], axis=1)
-
-ax = GIPlot.gi_continuous_plot("F1", "F2", f, df, cbar_label=f"Factor {f[1:]}")
-ax.set_xlabel(f"Factor F1")
-ax.set_ylabel(f"Factor F2")
-plt.savefig(
-    f"{RPATH}/1.MultiOmics_{f}_F1_F2_continous.pdf",
-    transparent=True,
-    bbox_inches="tight",
-)
-plt.close("all")
-
-ax = GIPlot.gi_continuous_plot("F1", "F2", "gexp_prot_corr", df, cbar_label=f"Transcript ~ Protein correlation")
-ax.set_xlabel(f"Factor F1")
-ax.set_ylabel(f"Factor F2")
-plt.savefig(
-    f"{RPATH}/1.MultiOmics_gexp_prot_corr_F1_F2_continous.pdf",
-    transparent=True,
-    bbox_inches="tight",
-)
-plt.close("all")
+for y_var, z_var in [
+    ("GExpProtCorrSanger&CMRI", "f"),
+    ("GExpProtCorrBroad", f"f_broad"),
+]:
+    ax = GIPlot.gi_continuous_plot(
+        "corr", y_var, z_var, plot_df, cbar_label=z_var, plot_reg=True
+    )
+    ax.set_xlabel("Correlation Sanger&CMRI and Broad\n(same cell line)")
+    plt.savefig(
+        f"{RPATH}/1.MultiOmics_{f}_sample_corr_{y_var}_{z_var}.pdf",
+        bbox_inches="tight",
+        transparent=True,
+    )
+    plt.close("all")

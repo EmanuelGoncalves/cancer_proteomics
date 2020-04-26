@@ -46,6 +46,7 @@ class LModel:
         self.X_ma = np.ma.masked_invalid(self.X.values)
 
         self.Y = Y.loc[self.samples]
+        self.Y = self.Y.loc[:, self.Y.std() > 0]
 
         self.M = M.loc[self.samples]
 

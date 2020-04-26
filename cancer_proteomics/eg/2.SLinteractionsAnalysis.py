@@ -127,7 +127,8 @@ breast_subtypes = pd.read_csv(f"{DPATH}/breast_subtypes.txt", sep="\t").set_inde
 # GI list
 #
 
-sl_lm = pd.read_csv(f"{RPATH}/lm_sklearn_protein_crispr.csv.gz").query("fdr < .1").dropna()
+# sl_lm = pd.read_csv(f"{RPATH}/lm_sklearn_protein_crispr.csv.gz").query("fdr < .1").dropna()
+sl_lm = pd.read_csv(f"{RPATH}/lm_sklearn_degr_crispr.csv.gz").query("fdr < .1").dropna()
 
 # CORUM
 sl_lm["corum"] = [
@@ -321,43 +322,6 @@ plt.close("all")
 #
 #
 
-df_corr = pd.read_csv(f"{RPATH}/2.SLProteinInteractions.csv.gz")
-novel_ppis = df_corr.query(f"(prot_fdr < .05) & (prot_corr > 0.5)")
-
-plot_df = pd.Series(
-    list(novel_ppis["protein1"]) + list(novel_ppis["protein2"])
-).value_counts()
-plot_df = pd.concat(
-    [
-        plot_df.rename("ppis"),
-        gi_list["x"].value_counts().rename("gis"),
-    ],
-    axis=1,
-).dropna()
-
-_, ax = plt.subplots(1, 1, figsize=(2, 2), dpi=600)
-
-ax.scatter(plot_df["ppis"], plot_df["gis"], c=GIPlot.PAL_DBGD[2], s=5, linewidths=0)
-
-ax.set_yscale("log")
-ax.set_xscale("log")
-
-ax.set_xlabel("Number of PPIs")
-ax.set_ylabel(f"Number of GIs")
-
-ax.grid(True, ls=":", lw=0.1, alpha=1.0, zorder=0, axis="both")
-
-cor, pval = spearmanr(plot_df["ppis"], plot_df["gis"])
-annot_text = f"Spearman's R={cor:.2g}, p-value={pval:.1e}"
-ax.text(0.95, 0.05, annot_text, fontsize=4, transform=ax.transAxes, ha="right")
-
-plt.savefig(f"{RPATH}/2.SL_ppis_gis_correlation.pdf", bbox_inches="tight")
-plt.close("all")
-
-
-#
-#
-
 gi_pairs = [
     ("ERBB2", "ERBB2"),
     ("SMARCA4", "SMARCA2"),
@@ -373,7 +337,7 @@ gi_pairs = [
 ]
 
 for p, c in gi_pairs:
-    # p, c = "GPAA1", "TTC4"
+    # p, c = "REXO4", "TP53"
     plot_df = pd.concat(
         [
             crispr.loc[[c]].T.add_suffix("_crispr"),

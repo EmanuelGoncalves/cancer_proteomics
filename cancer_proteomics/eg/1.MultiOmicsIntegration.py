@@ -29,7 +29,6 @@ import matplotlib as mpl
 import matplotlib.colors as colors
 import matplotlib.pyplot as plt
 from matplotlib import cm
-from sklearn.preprocessing import MinMaxScaler
 from crispy.Utils import Utils
 from crispy.GIPlot import GIPlot
 from Enrichment import Enrichment
@@ -178,7 +177,7 @@ covariates = pd.concat(
         crispr.loc[["SOX10", "SOX9", "MITF", "MYCN", "BRAF", "KRAS", "TP63", "CTNNB1", "STX4", "FERMT2", "GPX4", "EGFR", "FOXA1", "HNF1A", "GATA3", "TTC7A", "WRN"]].T.add_suffix("_crispr"),
         drespo.loc[["1804;Acetalax;GDSC2", "1372;Trametinib;GDSC2", "1190;Gemcitabine;GDSC2", "1819;Docetaxel;GDSC2", "2106;Uprosertib;GDSC2"]].T,
 
-        pd.get_dummies(ss["medium"]),
+        pd.get_dummies(ss["media"]),
         pd.get_dummies(ss["msi_status"]),
         pd.get_dummies(ss["growth_properties"]),
         pd.get_dummies(ss["tissue"])["Haematopoietic and Lymphoid"],
@@ -656,29 +655,25 @@ for x_var, x_df in [(f_broad_name, prot_obj.broad), (f_name, prot)]:
         plt.close("all")
 
 #
-plot_df = factor_df[(factor_df[f_name] > 2.5) & (factor_df[f_broad_name] > 2.5)]
-
-cn_genes = {g for i in mobem.index if i.startswith("gain.cna") and ".." in i for g in i.split("..")[1].split(".") if g in prot.index}
-
-g = "EGFR"
+g = "PIK3CB"
 
 plot_df = pd.concat([
-    cn.loc[g].rename("cn"),
-    prot.loc[g].rename("prot"),
-    (factor_df[f_name] > 3).astype(int).rename("factor"),
+    prot.reindex(gss_genes).dropna(how="all").mean().rename("GS"),
+    mobem.loc[f"{g}_mut"],
+    crispr.loc[g],
 ], axis=1).dropna()
 
 ax = GIPlot.gi_regression_marginal(
-    "cn",
-    "prot",
-    "factor",
+    "GS",
+    g,
+    f"{g}_mut",
     plot_df,
 )
 
 ax.ax_marg_x.set_title(g)
 
 plt.savefig(
-    f"{RPATH}/1.MultiOmics_{f}_CN_corr.pdf",
+    f"{RPATH}/1.MultiOmics_{f}_GS_corr.pdf",
     bbox_inches="tight",
     transparent=True,
 )

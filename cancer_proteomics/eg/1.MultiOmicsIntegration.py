@@ -508,7 +508,7 @@ for n, n_factors, factor in [("Sanger&CMRI", mofa, f), ("Broad", mofa_broad, f_b
     n_features = 500
 
     for v in ["proteomics", "transcriptomics"]:
-        MOFAPlot.factor_weights_scatter(n_factors, v, factor, n_features=1000, label_features=False)
+        MOFAPlot.factor_weights_scatter(n_factors, v, factor, n_features=3000, label_features=False)
         plt.savefig(
             f"{RPATH}/1.MultiOmics_{f}_top_features_{v}_{n}.pdf",
             transparent=True,
@@ -545,6 +545,7 @@ for v in enr_views:
         factor_enr.query(f"view == '{v}'").set_index("Term|NES")["nes"].rename("Sanger&CMRI"),
         factor_enr_broad.query(f"view == '{v}'").set_index("Term|NES")["nes"].rename("Broad"),
     ], axis=1).dropna()
+    plot_df.to_csv(f"{RPATH}/1.MultiOmics_{f}_gseapy_{v}.csv")
     plot_df.index = [" ".join(i.split("_")) for i in plot_df.index]
 
     gs_dw = plot_df[(plot_df["Sanger&CMRI"] < -0.25) & (plot_df["Broad"] < -0.3)].sort_values("Sanger&CMRI")
@@ -630,52 +631,3 @@ for gs in [
                 bbox_inches="tight",
             )
             plt.close("all")
-
-#
-gss = ["GO_TRANSLATION_INITIATION_FACTOR_ACTIVITY", "KEGG_PENTOSE_PHOSPHATE_PATHWAY", "HALLMARK_PI3K_AKT_MTOR_SIGNALING"]
-gss_genes = set.union(*[Enrichment.signature(g) for g in gss])
-
-for x_var, x_df in [(f_broad_name, prot_obj.broad), (f_name, prot)]:
-    x_gss_corr = pd.DataFrame({
-        s: sample_corr(x_df[s], gexp_all[s], gss_genes) for s in set(x_df).intersection(gexp_all)},
-        index=["corr", "pvalue"],
-    ).T
-
-    y_vars = [x_var, f"GExpProtCorr{x_var.split(' ')[-1]}"]
-    x_gss_corr = pd.concat([x_gss_corr, factor_df[y_vars]], axis=1)
-
-    for y_var in y_vars:
-        grid = GIPlot.gi_regression("corr", y_var, x_gss_corr.dropna(subset=[x_var, y_var]))
-        grid.set_axis_labels("Gene-sets Transcript ~ Protein", y_var)
-        plt.savefig(
-            f"{RPATH}/1.MultiOmics_{f}_GS_corr_{x_var}_{y_var}.pdf",
-            bbox_inches="tight",
-            transparent=True,
-        )
-        plt.close("all")
-
-#
-g = "PIK3CB"
-
-plot_df = pd.concat([
-    prot.reindex(gss_genes).dropna(how="all").mean().rename("GS"),
-    mobem.loc[f"{g}_mut"],
-    crispr.loc[g],
-], axis=1).dropna()
-
-ax = GIPlot.gi_regression_marginal(
-    "GS",
-    g,
-    f"{g}_mut",
-    plot_df,
-)
-
-ax.ax_marg_x.set_title(g)
-
-plt.savefig(
-    f"{RPATH}/1.MultiOmics_{f}_GS_corr.pdf",
-    bbox_inches="tight",
-    transparent=True,
-)
-plt.close("all")
-

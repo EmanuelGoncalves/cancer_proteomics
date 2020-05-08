@@ -18,7 +18,9 @@
 # %load_ext autoreload
 # %autoreload 2
 
+import gseapy
 import logging
+import matplotlib
 import numpy as np
 import pandas as pd
 import pkg_resources
@@ -28,10 +30,11 @@ from natsort import natsorted
 from crispy.Utils import Utils
 from crispy.GIPlot import GIPlot
 from Enrichment import Enrichment
+from crispy.MOFA import MOFA, MOFAPlot
+from crispy.CrispyPlot import CrispyPlot
 from sklearn.linear_model import LinearRegression
 from scipy.stats import spearmanr, pearsonr, zscore
-from sklearn.preprocessing import quantile_transform
-
+from sklearn.preprocessing import quantile_transform, MinMaxScaler
 
 LOG = logging.getLogger("Crispy")
 DPATH = pkg_resources.resource_filename("crispy", "data/")
@@ -59,97 +62,56 @@ ctype_pal = sns.color_palette("tab20c").as_hex() + sns.color_palette("tab20b").a
 ctype_pal = dict(zip(natsorted(ctype.value_counts().index), ctype_pal))
 
 
-def download_files(ffile=f"{CPATH}/PDC_file_manifest_04302020_220307.csv"):
-    import wget
+#
+#
 
-    flist = pd.read_csv(ffile)
+stromal = pd.read_excel(f"{DPATH}/41467_2015_BFncomms9971_MOESM1236_ESM.xlsx", index_col=0)
+stromal = stromal.loc[[int(c.split("-")[3][:-1]) < 10 for c in stromal.index]]
+stromal.index = [i[:12] for i in stromal.index]
 
-    for f_name, f_url in flist[["File Name", "File Download Link"]].values:
-        LOG.info(f"{f_name}: {f_url}")
-        wget.download(f_url, out=f"{CPATH}/{f_name}")
+stromal_count = stromal.index.value_counts()
+stromal = stromal[~stromal.index.isin(stromal_count[stromal_count != 1].index)]
 
 
+#
+#
 def sample_corr(var1, var2, idx_set):
     return spearmanr(
         var1.reindex(index=idx_set), var2.reindex(index=idx_set), nan_policy="omit"
     )
 
-#
-# def cptac_pipeline():
-#     # Import proteomics matrix
-#     dfile = "CPTAC2_Breast_Prospective_Collection_BI_Proteome.tmt10.tsv"
-#     dmatrix = pd.read_csv(f"{CPATH}/{dfile}", sep="\t")
-#
-#     # Set gene ids as index
-#     if dmatrix["Gene"].duplicated().any():
-#         LOG.warning("Duplicated Gene IDs")
-#
-#     dmatrix = dmatrix.groupby("Gene").mean().drop(["Mean", "Median", "StdDev"], errors="ignore")
-#     LOG.info(f"Proteins x Samples: {dmatrix.shape}")
-#
-#     # Select unshared peptides measurements
-#     dtype = " Unshared Log Ratio" if len(
-#         [c for c in dmatrix if c.endswith(" Unshared Log Ratio")]) else " Unshared Area"
-#     dmatrix = dmatrix[[c for c in dmatrix if c.endswith(dtype)]]
-#     dmatrix.columns = [c.split(" ")[0] for c in dmatrix]
-#
-#     # Check missing values
-#     completeness = dmatrix.count().sum() / np.prod(dmatrix.shape)
-#     if (completeness == 1) and (dtype == " Unshared Area"):
-#         LOG.info("No missing values: replace 0s with NaNs")
-#         dmatrix = dmatrix.replace(0, np.nan)
-#         completeness = dmatrix.count().sum() / np.prod(dmatrix.shape)
-#     LOG.info(f"Completeness: {completeness * 100:.1f}%")
-#
-#     # Log transform if peak area used
-#     if dtype == " Unshared Area":
-#         LOG.info("Peaks areas present: log2 scale")
-#         dmatrix = dmatrix.pipe(np.log2)
-#         dmatrix.columns = [c[:-3] for c in dmatrix]
-#
-#     # Map IDs to TCGA gene expression
-#     d_idmap = {c: [gc for gc in gexp_columns if c in gc] for c in dmatrix}
-#     d_idmap = {k: v[0] for k, v in d_idmap.items() if len(v) == 1}
-#     dmatrix = dmatrix[d_idmap.keys()].rename(columns=d_idmap)
-#     LOG.info(f"Gexp map (Proteins x Samples): {dmatrix.shape}")
-#
-#     # Drop duplicates samples
-#     dmatrix = dmatrix.loc[:, ~dmatrix.columns.duplicated(keep=False)]
-#     LOG.info(f"Drop duplicated columns: {dmatrix.shape}")
-#
-#     # Quantile transform per sample
-#     dmatrix = pd.DataFrame(
-#         quantile_transform(dmatrix.T, output_distribution="normal").T,
-#         index=dmatrix.index,
-#         columns=dmatrix.columns,
-#     )
-
 
 # Proteomics data-sets
 dfiles = [
     "Human__TCGA_BRCA__BI__Proteome__QExact__01_28_2016__BI__Gene__CDAP_iTRAQ_UnsharedLogRatio_r2.cct",
-    "Human__TCGA_COADREAD__VU__Proteome__Velos__01_28_2016__VU__Gene__CDAP_UnsharedPrecursorArea_r2.cct",
+    # "Human__TCGA_COADREAD__VU__Proteome__Velos__01_28_2016__VU__Gene__CDAP_UnsharedPrecursorArea_r2.cct",
     "Human__TCGA_OV__JHU__Proteome__Velos__01_28_2016__JHU__Gene__CDAP_iTRAQ_UnsharedLogRatio_r2.cct",
     "Human__TCGA_OV__PNNL__Proteome__Velos___QExact__01_28_2016__PNNL__Gene__CDAP_iTRAQ_UnsharedLogRatio_r2.cct",
 ]
 
-dmatrix = []
+dmatrix, ms_type = [], []
 for dfile in dfiles:
     df = pd.read_csv(f"{CPATH}/linkedomics/{dfile}", sep="\t", index_col=0)
 
     if "COADREAD" in dfile:
         df = df.replace(0, np.nan)
-        df = df / df.sum()
+        # df = df / df.sum()
         df = df.pipe(np.log2)
-        df = pd.DataFrame(df.pipe(zscore, nan_policy="omit"), index=df.index, columns=df.columns)
+
+    # # df = pd.DataFrame(df.pipe(zscore, nan_policy="omit", axis=1), index=df.index, columns=df.columns)
+    # df = df[df.count(1) > (df.shape[1] * .5)]
+    df = pd.DataFrame({i: Utils.gkn(df.loc[i].dropna()).to_dict() for i in df.index}).T
 
     # Simplify barcode
-    dmatrix.columns = [i[:12] for i in dmatrix]
+    df.columns = [i[:12].replace(".", "-") for i in df]
+
+    # MS type
+    ms_type.append(pd.Series("LF" if "COADREAD" in dfile else "TMT", index=df.columns))
 
     dmatrix.append(df)
 
+ms_type = pd.concat(ms_type).reset_index().groupby("index").first()[0]
 dmatrix = pd.concat(dmatrix, axis=1)
-dmatrix.columns = [c.replace(".", "-") for c in dmatrix]
 LOG.info(f"Assembled data-set: {dmatrix.shape}")
 
 # Dicard poor corelated
@@ -166,39 +128,6 @@ d_idmap = {c: [gc for gc in gexp_columns if c in gc] for c in dmatrix}
 d_idmap = {k: v[0] for k, v in d_idmap.items() if len(v) == 1}
 dmatrix = dmatrix[d_idmap.keys()].rename(columns=d_idmap)
 LOG.info(f"Gexp map (Proteins x Samples): {dmatrix.shape}")
-
-# Regress-out covariates
-clinical = pd.read_csv(f'{CPATH}/tcga_clinical.csv').dropna(subset=['patient.gender', 'patient.days_to_birth'])
-clinical['patient.days_to_birth'] *= -1
-
-samples = set(clinical['patient.bcr_patient_barcode']).intersection(dmatrix)
-
-clinical_gender = clinical.groupby('patient.bcr_patient_barcode')['patient.gender'].first()
-clinical_age = clinical.groupby('patient.bcr_patient_barcode')['patient.days_to_birth'].first()
-clinical_disease = clinical.groupby('patient.bcr_patient_barcode')["admin.disease_code"].first()
-
-design = pd.concat([
-    clinical_age,
-    clinical_gender.str.get_dummies(),
-    clinical_disease.str.get_dummies(),
-], axis=1).reindex(samples)
-design = design.loc[:, design.std() > 0]
-
-
-def rm_batch(x, y):
-    ys = y.dropna()
-    xs = x.loc[ys.index]
-
-    lm = LinearRegression().fit(xs, ys)
-
-    return ys - xs.dot(lm.coef_) - lm.intercept_
-
-
-dmatrix = pd.DataFrame({p: rm_batch(design, dmatrix.loc[p, design.index]) for p in dmatrix.index}).T
-
-# Normalise
-dmatrix = dmatrix[dmatrix.count(1) > (dmatrix.shape[1] * .5)]
-dmatrix = pd.DataFrame({i: Utils.gkn(dmatrix.loc[i].dropna()).to_dict() for i in dmatrix.index}).T
 
 # Finalise and export
 dmatrix.to_csv(f"{DPATH}/merged_cptac_tcga_proteomics.csv.gz", compression="gzip")
@@ -217,56 +146,148 @@ s_pg_corr = pd.DataFrame(
     index=["corr", "pvalue"],
 ).T
 
-gss = [
-    "GO_TRANSLATION_INITIATION_FACTOR_ACTIVITY",
-    "KEGG_PENTOSE_PHOSPHATE_PATHWAY",
-    "HALLMARK_PI3K_AKT_MTOR_SIGNALING",
-]
+covariates = pd.concat([
+    s_pg_corr["corr"].rename("GExpProtCorr"),
+    dmatrix.count().pipe(np.log).rename("NProteins"),
+    dmatrix.median().rename("GlobalProteomics"),
+    # ms_type.reindex(s_pg_corr.index).str.get_dummies(),
+    stromal.reindex(s_pg_corr.index)["CPE"].rename("Purity"),
+], axis=1).dropna()
 
-gss_genes = (
-    set.union(*[Enrichment.signature(g) for g in gss])
-    .intersection(gexp.index)
-    .intersection(dmatrix.index)
-)
-
-s_pg_gss_corr = pd.DataFrame(
-    {s: sample_corr(dmatrix[s], gexp[s], gss_genes) for s in dmatrix},
-    index=["corr", "pvalue"],
-).T
 
 #
-plot_df = pd.concat(
-    [
-        s_pg_gss_corr["corr"].rename("GeneSets"),
-        s_pg_corr["corr"].rename("Overall"),
-        dmatrix.median().rename("protein"),
-        gexp.loc[gss_genes].median().rename("transcript"),
-        ctype.rename("ctype"),
-    ],
-    axis=1,
-).dropna()
+#
 
-grid = GIPlot.gi_regression("GeneSets", "Overall", plot_df, hue="ctype", palette=ctype_pal)
-grid.set_axis_labels("Translation initiation\nTranscript ~ Protein", "Overall Transcript ~ Protein")
+dmatrix, gexp = dmatrix[covariates.index], gexp[covariates.index]
+
+mofa = MOFA(
+    views=dict(proteomics=dmatrix, transcriptomics=gexp),
+    covariates=dict(
+        proteomics=covariates[["NProteins", "GlobalProteomics", "Purity"]],
+        transcriptomics=covariates[["NProteins", "GlobalProteomics", "Purity"]],
+    ),
+    iterations=2000,
+    use_overlap=True,
+    convergence_mode="fast",
+    factors_n=10,
+    from_file=f"{RPATH}/1.MultiOmics_CPTAC.hdf5",
+)
+
+
+# Variance explained across data-sets
+#
+
+factors_corr = {}
+for f in mofa.factors:
+    factors_corr[f] = {}
+
+    for c in covariates:
+        fc_samples = list(covariates.reindex(mofa.factors[f].index)[c].dropna().index)
+        factors_corr[f][c] = pearsonr(mofa.factors[f][fc_samples], covariates[c][fc_samples])[0]
+
+factors_corr = pd.DataFrame(factors_corr)
+
+
+MOFAPlot.variance_explained_heatmap(mofa)
 plt.savefig(
-    f"{RPATH}/1.MultiOmics_CPTAC_GS_corr.pdf", bbox_inches="tight", transparent=True
+    f"{RPATH}/1.MultiOmics_CPTAC_factors_rsquared_heatmap.pdf", bbox_inches="tight"
 )
 plt.close("all")
 
+MOFAPlot.covariates_heatmap(factors_corr, mofa, ctype)
+plt.savefig(
+    f"{RPATH}/1.MultiOmics_CPTAC_factors_covariates_clustermap.pdf",
+    bbox_inches="tight",
+    transparent=True,
+)
+plt.close("all")
+
+
 #
-for ctypes in [["OV", "BRCA"], ["COAD", "READ"]]:
-    for x_var in ["protein", "transcript"]:
-        grid = GIPlot.gi_regression(
-            x_var,
-            "Overall",
-            plot_df[plot_df["ctype"].isin(ctypes)],
-            hue="ctype",
-            palette=ctype_pal
-        )
-        grid.set_axis_labels(f"Translation initiation\n{x_var} median", "Overall Transcript ~ Protein")
-        plt.savefig(
-            f"{RPATH}/1.MultiOmics_CPTAC_GS_corr_continuous_{x_var}_{'_'.join(ctypes)}.pdf",
-            transparent=True,
-            bbox_inches="tight",
-        )
-        plt.close("all")
+#
+
+grid = GIPlot.gi_regression("Purity", "GExpProtCorr", covariates)
+grid.set_axis_labels("Purity", "GExpProtCorr")
+plt.savefig(
+    f"{RPATH}/1.MultiOmics_GExpProtCorr_Purity.pdf",
+    bbox_inches="tight",
+    transparent=True,
+)
+plt.close("all")
+
+
+# Factor 3
+#
+
+f = "F2"
+factor_df = pd.concat(
+    [
+        mofa.factors[f],
+        covariates,
+        ctype,
+    ],
+    axis=1,
+    sort=False,
+).dropna(subset=[f])
+
+
+for y_var in ["GExpProtCorr"]:
+    grid = GIPlot.gi_regression(f, y_var, factor_df)
+    grid.set_axis_labels(f"CPTAC Factor {f[1:]}", y_var)
+    plt.savefig(
+        f"{RPATH}/1.MultiOmics_{f}_CPTAC_{y_var}.pdf",
+        bbox_inches="tight",
+        transparent=True,
+    )
+    plt.close("all")
+
+#
+enr_views = ["proteomics"]
+f_enr = mofa.pathway_enrichment(f, views=enr_views)
+
+f_enr_overlap = pd.concat([
+    f_enr.set_index("Term|NES")["nes"],
+    pd.read_csv(f"{RPATH}/1.MultiOmics_F6_gseapy_proteomics.csv", index_col=0),
+], axis=1).dropna()
+
+#
+
+gs_dw = f_enr_overlap[(f_enr_overlap["Sanger&CMRI"] < -0.2) & (f_enr_overlap["nes"] < -0.2)].sort_values("Sanger&CMRI")
+gs_highlight = list(gs_dw.index)
+
+gs_palette = pd.Series(
+    sns.light_palette("#e6550d", n_colors=len(gs_dw) + 1, reverse=True).as_hex()[:-1],
+    index=gs_highlight,
+)
+
+_, ax = plt.subplots(1, 1, figsize=(3, 3), dpi=600)
+
+ax.scatter(
+    f_enr_overlap["nes"], f_enr_overlap["Sanger&CMRI"], c=GIPlot.PAL_DBGD[2], s=5, linewidths=0
+)
+
+for g in gs_highlight:
+    ax.scatter(
+        f_enr_overlap.loc[g, "nes"],
+        f_enr_overlap.loc[g, "Sanger&CMRI"],
+        c=gs_palette[g],
+        s=10,
+        linewidths=0,
+        label=g,
+    )
+
+cor, pval = spearmanr(f_enr_overlap["nes"], f_enr_overlap["Sanger&CMRI"])
+annot_text = f"Spearman's R={cor:.2g}, p-value={pval:.1e}"
+ax.text(0.98, 0.02, annot_text, fontsize=4, transform=ax.transAxes, ha="right")
+
+ax.grid(True, ls=":", lw=0.1, alpha=1.0, zorder=0)
+
+ax.set_xlabel(f"CPTAC")
+ax.set_ylabel("Sanger&CMRI")
+# ax.set_title(f"Factor {f[1:]} Proteomics weights enrichment score (NES)")
+
+ax.legend(frameon=False, prop={"size": 4}, loc="center left", bbox_to_anchor=(1, 0.5))
+
+plt.savefig(f"{RPATH}/1.MultiOmics_{f}_gseapy_CPTAC_scatter.pdf", bbox_inches="tight")
+plt.close("all")
+

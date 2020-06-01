@@ -131,6 +131,7 @@ LOG.info(f"Gexp map (Proteins x Samples): {dmatrix.shape}")
 
 # Finalise and export
 dmatrix.to_csv(f"{DPATH}/merged_cptac_tcga_proteomics.csv.gz", compression="gzip")
+# dmatrix = pd.read_csv(f"{DPATH}/merged_cptac_tcga_proteomics.csv.gz", index_col=0)
 completeness = dmatrix.count().sum() / np.prod(dmatrix.shape)
 LOG.info(f"Completeness: {completeness * 100:.1f}%")
 

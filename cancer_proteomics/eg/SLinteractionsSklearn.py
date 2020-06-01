@@ -22,6 +22,7 @@ import logging
 import numpy as np
 import pandas as pd
 import pkg_resources
+from crispy import QCplot
 from scipy.stats import chi2
 from natsort import natsorted
 from sklearn.preprocessing import StandardScaler
@@ -234,3 +235,15 @@ if __name__ == "__main__":
         f"{RPATH}/lm_sklearn_degr_crispr.csv.gz", index=False, compression="gzip"
     )
 
+    # MOFA factors
+    #
+    mfactors = pd.read_csv(f"{RPATH}/MultiOmics_Sanger&CMRI_factors_largek.csv", index_col=0).T
+    msamples = samples.intersection(mfactors)
+
+    mfactors_lm = LModel(
+        Y=crispr[msamples].T, X=mfactors[msamples].T, M=covariates.loc[msamples]
+    ).fit_matrix()
+
+    mfactors_lm.to_csv(
+        f"{RPATH}/lm_sklearn_mfactors_crispr.csv.gz", index=False, compression="gzip"
+    )

@@ -32,6 +32,7 @@ from matplotlib import cm
 from crispy.Utils import Utils
 from crispy.GIPlot import GIPlot
 from Enrichment import Enrichment
+import matplotlib.patches as mpatches
 from scipy.stats import spearmanr, pearsonr
 from crispy.MOFA import MOFA, MOFAPlot
 from crispy.CrispyPlot import CrispyPlot
@@ -85,8 +86,9 @@ LOG.info(f"Samples: {len(samples)}")
 #
 
 prot = prot_obj.filter(subset=set(ss.index))
-prot = prot_obj.protein_raw.reindex(prot.index).dropna(how="all")
-prot = pd.DataFrame({i: Utils.gkn(prot.loc[i].dropna()).to_dict() for i in prot.index}).T
+# prot = prot_obj.protein_raw.reindex(prot.index).dropna(how="all")
+# prot = prot[prot.count(1) > 100]
+# prot = pd.DataFrame({i: Utils.gkn(prot.loc[i].dropna()).to_dict() for i in prot.index}).T
 # prot = prot_obj.broad.copy()
 LOG.info(f"Proteomics: {prot.shape}")
 
@@ -113,41 +115,53 @@ genes = list(set.intersection(set(prot.index), set(gexp.index), set(cn.index)))
 LOG.info(f"Genes: {len(genes)}; Samples: {len(samples)}")
 
 
+# Data tranformations
+#
+
+gexp = pd.DataFrame({i: Utils.gkn(gexp.loc[i].dropna()).to_dict() for i in genes}).T
+
+
 # Correlations with copy number
 #
 
 
-def sample_corr(var1, var2, idx_set=None, method="spearman"):
+def sample_corr(var1, var2, idx_set=None, method="pearson"):
     if idx_set is None:
-        idx_set = set(var1.index).intersection(var2.index)
+        idx_set = set(var1.dropna().index).intersection(var2.dropna().index)
+
+    else:
+        idx_set = set(var1.reindex(idx_set).dropna().index).intersection(
+            var2.reindex(idx_set).dropna().index
+        )
 
     if method == "spearman":
         r, p = spearmanr(
             var1.reindex(index=idx_set), var2.reindex(index=idx_set), nan_policy="omit"
         )
     else:
-        r, p = pearsonr(
-            var1.reindex(index=idx_set), var2.reindex(index=idx_set)
-        )
+        r, p = pearsonr(var1.reindex(index=idx_set), var2.reindex(index=idx_set))
 
     return r, p, len(idx_set)
 
 
 def corr_genes(s):
     LOG.info(f"Sample={s}")
-    prot_r, prot_p, prot_len = sample_corr(cn.loc[genes, s].dropna(), prot.loc[genes, s].dropna())
-    gexp_r, gexp_p, gexp_len = sample_corr(cn.loc[genes, s].dropna(), gexp.loc[genes, s].dropna())
+    prot_r, prot_p, prot_len = sample_corr(prot[s], cn[s], genes)
+    gexp_r, gexp_p, gexp_len = sample_corr(gexp[s], cn[s], set(prot[s].dropna().index))
     return dict(
         sample=s,
         prot_r=prot_r,
         prot_p=prot_p,
+        prot_l=prot_len,
         gexp_r=gexp_r,
         gexp_p=gexp_p,
+        gexp_l=gexp_len,
     )
 
 
 patt = pd.DataFrame([corr_genes(s) for s in samples]).dropna()
 patt = patt.assign(attenuation=patt.eval("gexp_r - prot_r"))
+patt = patt.set_index("sample")
 print(patt.sort_values("attenuation"))
 
 # GMM
@@ -231,87 +245,51 @@ plt.close("all")
 
 #
 #
+prot_filter = prot[prot.count(1) > 150][patt["attenuation"].index]
+prot_corr = prot_filter.T.corrwith(patt["attenuation"])
 
-covs = pd.concat(
+prot_corr_enr = pd.concat(
     [
-        s_pg_corr["corr"].rename("GexpProtCorr"),
-        cn_inst.rename("GenomicInstability"),
-        pd.get_dummies(ss["media"]),
-        pd.get_dummies(ss["msi_status"]),
-        pd.get_dummies(ss["growth_properties"]),
-        pd.get_dummies(ss["tissue"])["Haematopoietic and Lymphoid"],
-        ss.reindex(index=samples, columns=["ploidy", "mutational_burden", "growth"]),
-        prot.count().pipe(np.log2).rename("NProteins"),
-        prot_obj.reps.rename("RepsCorrelation"),
-        prot_obj.protein_raw.median().rename("GlobalProteomics"),
+        gseapy.ssgsea(
+            prot_corr,
+            gene_sets=Enrichment.read_gmt(f"{DPATH}/pathways/{g}"),
+            no_plot=True,
+        )
+        .res2d.assign(geneset=g)
+        .reset_index()
+        for g in [
+            "c6.all.v7.1.symbols.gmt",
+            "c5.all.v7.1.symbols.gmt",
+            "h.all.v7.1.symbols.gmt",
+            "c2.all.v7.1.symbols.gmt",
+        ]
     ],
-    axis=1,
+    ignore_index=True,
 )
+prot_corr_enr = prot_corr_enr.rename(columns={"sample1": "nes"}).sort_values("nes")
 
-
-#
-#
-
-# s = "SIDM00424"
-for s in ["SIDM00424", "SIDM00930", "SIDM00462", "SIDM00985"]:
-    plot_df = pd.concat(
-        [prot[s].rename("prot"), gexp[s].rename("gexp")], axis=1
-    ).dropna()
-    grid = GIPlot.gi_regression("prot", "gexp", plot_df)
-    plt.savefig(f"{RPATH}/satt_scatter_{s}.pdf", bbox_inches="tight", transparent=True)
-    plt.close("all")
-
-
-#
-#
-
-genesets = ["c5.all.v7.1.symbols.gmt"]
-
-gs_corr = {}
-for s in list(samples):
-    LOG.info(f"sample = {s}")
-    df_prot = prot[s].reindex(gexp.index).dropna()
-    df_gexp = gexp.loc[df_prot.index, s]
-
-    sigs = {
-        k: v
-        for g in genesets
-        for k, v in Enrichment.read_gmt(
-            f"{DPATH}/pathways/{g}", subset=set(df_prot.index)
-        ).items()
-    }
-
-    gs_corr[s] = {s: sample_corr(df_prot, df_gexp, sigs[s])[2] for s in sigs}
-gs_corr = pd.DataFrame(gs_corr)
-gs_corr.to_csv(f"{RPATH}/satt_gs_corr.csv.gz", compression="gzip")
-
-gs_corr_filter = gs_corr[gs_corr.std(1) > -np.log10(0.01)]
-gs_corr_filter = gs_corr_filter[gs_corr_filter.count(1) > 300]
-
-#
-#
-
-crispr_covs = LMModels.define_covariates(
-    institute=crispr_obj.merged_institute,
-    medium=True,
-    cancertype=False,
-    tissuetype=False,
-    mburden=False,
-    ploidy=False,
+sig_enr = gseapy.ssgsea(
+    prot_corr,
+    gene_sets=Enrichment.read_gmt(f"{DPATH}/pathways/c2.all.v7.1.symbols.gmt"),
+    no_plot=False,
+    permutation_num=1000,
+    verbose=True,
 )
-crispr_covs = (
-    pd.concat(
-        [
-            crispr_covs,
-            covs[["GenomicInstability", "RepsCorrelation", "GlobalProteomics"]],
-        ],
-        axis=1,
-    )
-    .reindex(samples)
-    .dropna()
-)
+sig_enr_results = pd.read_csv(f"{RPATH}/satt_scatter.gseapy.ssgsea.gene_sets.report.txt", sep="\t", index_col=0)
 
-lm_crispr = LModel(
-    Y=crispr[crispr_covs.index].T, X=gs_corr_filter[crispr_covs.index].T, M=crispr_covs
-).fit_matrix()
-print(lm_crispr.query("fdr < 0.1").head(60))
+ledge_genes = set.intersection(*[{g for g in sig_enr_results.loc[s, "ledge_genes"].split(";")} for s in sig_enr_results.sort_values("es").head(5)["ledge_genes"].index])
+
+#
+plot_df = pd.concat([
+    patt["prot_r"],
+    patt["gexp_r"],
+    prot.reindex(ledge_genes).mean().rename("ledge"),
+], axis=1).dropna().sort_values("ledge", ascending=False)
+
+g = GIPlot.gi_continuous_plot("gexp_r", "prot_r", "ledge", plot_df, cbar_label="Leading-edge enrichment")
+
+g.set_xlabel("Transcriptomics ~ Copy number\n(Pearson's R)")
+g.set_ylabel("Protein ~ Copy number\n(Pearson's R)")
+
+plt.savefig(f"{RPATH}/Satt_scatter_ledge.pdf", bbox_inches="tight")
+plt.close("all")

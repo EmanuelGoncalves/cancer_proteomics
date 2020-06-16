@@ -1,0 +1,71 @@
+---
+title: "R Notebook"
+---
+
+```{r}
+library(iProFun)
+options(warn=-1)
+```
+
+```{r}
+iprofun_result <- iProFun(ylist = list(rna, protein, phospho), xlist = list(cna, methy), covariates = list(rna_pc_1_3,
+protein_pc_1_3, phospho_pc_1_3), pi = rep(0.05, 3), sub.ID.common=NULL, colum.to.keep=NULL)
+```
+
+```{r}
+sanger_cna = read.csv("../data/iprofun/cna.tsv", sep = "\t")
+sanger_rna = read.csv("../data/iprofun/rna.tsv", sep = "\t")
+sanger_methy = read.csv("../data/iprofun/methy.tsv", sep = "\t")
+sanger_protein = read.csv("../data/iprofun/protein.tsv", sep = "\t")
+
+sanger_rna_pca = read.csv("../data/iprofun/rna_pca.tsv", sep = "\t")
+sanger_protein_pca = read.csv("../data/iprofun/protein_pca.tsv", sep = "\t")
+
+ic50 = read.csv("../data/drug/ic50_processed_median.csv", sep=",", stringsAsFactors = F)
+cellline = ic50[,c("Cell.line.name", "Tissue")]
+cellline = cellline[!duplicated(cellline),]
+```
+
+```{r}
+iprofun_result <- iProFun(ylist = list(sanger_rna, sanger_protein), xlist = list(sanger_cna, sanger_methy), covariates = list(sanger_rna_pca, sanger_protein_pca), pi = rep(0.05, 3), sub.ID.common=NULL, colum.to.keep=NULL)
+```
+
+
+```{r}
+options(warn=-1)
+iprofun_permutate_result <- iProFun_permutate(ylist = list(sanger_rna, sanger_protein), xlist = list(sanger_cna, sanger_methy), covariates = list(sanger_rna_pca, sanger_protein_pca), sub.ID.common=NULL, colum.to.keep=c("GENE_ID"), pi = rep(0.05, 3), permutate_number = 1, fdr = 0.1, PostCut = 0.99, filter <- c(1,0), grids = c(seq(0.75, 0.99, 0.01), seq(0.991, 0.999, 0.001), seq(0.9991, 0.9999, 0.0001)), seed=123)
+```
+
+```{r}
+saveRDS(iprofun_permutate_result, "../data/iprofun/iprofun_permutate_result_.rds")
+```
+
+```{r}
+a = iprofun_permutate_result$PostProb_original
+a1 = as.data.frame(a[1])
+a2 = as.data.frame(a[2])
+```
+
+
+
+
+```{r}
+iprofun_permutate_result = readRDS("../data/iprofun/iprofun_permutate_result_0.99.rds")
+iprofun_permutate_result_fdr0.2 = readRDS("../data/iprofun/iprofun_permutate_result_0.99_fdr0.2.rds")
+
+```
+
+```{r}
+gene_cna_fdr0.2 = as.data.frame(iprofun_permutate_result_fdr0.2$Gene_fdr[1])
+gene_methy_fdr0.2 = as.data.frame(iprofun_permutate_result_fdr0.2$Gene_fdr[2])
+
+gene_cna = as.data.frame(iprofun_permutate_result$Gene_fdr[1])
+gene_methy = as.data.frame(iprofun_permutate_result$Gene_fdr[2])
+
+pp = iprofun_permutate_result$PostProb_original
+pp_cna = as.data.frame(pp[1])
+
+gene_cna[pp_cna$X4==1,]
+
+pp_methy = as.data.frame(pp[2])
+```

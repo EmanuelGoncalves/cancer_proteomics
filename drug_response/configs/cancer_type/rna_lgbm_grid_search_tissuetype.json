@@ -1,0 +1,22 @@
+{
+  "data_file": "/home/scai/SangerDrug/data/cancer_type/cancer_tissue_type_rna.tsv",
+  "model": "lgbm",
+  "cv": 5,
+  "params_grid": {
+    "n_estimators": [500, 700],
+    "num_leaves": [31],
+    "max_bin": [255, 350]
+  },
+  "imputer": "none",
+  "min_val": -2.242616,
+  "seed": 42,
+  "work_dir": "/home/scai/SangerDrug/work_dirs/protein_tissue_type/LGBM",
+  "importance": true,
+  "data_type": "rna",
+  "task": "classification",
+  "metric": "accuracy",
+  "sign": 1,
+  "target": "Tissue_type",
+  "suffix": "_tissue_type_rna",
+  "cut_off": 20
+}

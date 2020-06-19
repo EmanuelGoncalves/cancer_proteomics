@@ -1,0 +1,21 @@
+{
+  "data_file": "/home/scai/SangerDrug/data/cancer_type/cancer_tissue_type_protein_rep.tsv",
+  "model": "xgboost",
+  "cv": 5,
+  "params_grid": {
+    "n_estimators": [100, 200, 300],
+    "n_jobs": [-1]
+  },
+  "imputer": "min",
+  "min_val": -2.242616,
+  "seed": 42,
+  "work_dir": "/home/scai/SangerDrug/work_dirs/protein_cancer_type_rep/XGB",
+  "importance": true,
+  "data_type": "protein",
+  "task": "classification",
+  "metric": "accuracy",
+  "sign": 1,
+  "target": "Cancer_type",
+  "suffix": "_cancer_type",
+  "cut_off": 120
+}

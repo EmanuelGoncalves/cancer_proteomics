@@ -1,0 +1,82 @@
+---
+title: "iprofun analysis"
+---
+
+```{r setup}
+library(iProFun)
+library(goseq)
+```
+
+#--------All cell lines---------
+```{r}
+result = readRDS("../data/iprofun/iprofun_permutate_result_10.rds")
+gene_cna = as.data.frame(result$Gene_fdr[1])
+gene_methy = as.data.frame(result$Gene_fdr[2])
+
+cna_atten = as.character(gene_cna[(gene_cna$Y1==1) & (gene_cna$Y2==0), "V1"])
+methy_atten = as.character(gene_methy[(gene_methy$Y1==1) & (gene_methy$Y2==0), "V1"])
+
+cna_genes = as.integer(gene_cna$V1 %in% cna_atten)
+names(cna_genes) = gene_cna$V1
+
+methy_genes = as.integer(gene_methy$V1 %in% methy_atten)
+names(methy_genes) = gene_methy$V1
+
+pwf_cna = nullp(cna_genes,"hg19","geneSymbol")
+GO.wall.cna=goseq(pwf_cna,"hg19","geneSymbol")
+write.table(GO.wall.cna, "../data/iprofun/goseq/all_cell_lines_cna.tsv", sep="\t", row.names = F)
+
+pwf_methy = nullp(methy_genes,"hg19","geneSymbol")
+GO.wall.methy=goseq(pwf_methy,"hg19","geneSymbol")
+write.table(GO.wall.methy, "../data/iprofun/goseq/all_cell_lines_methy.tsv", sep="\t", row.names = F)
+```
+
+#-----tissue specific--------
+```{r}
+ic50 = read.table("../data/drug/ic50_processed_median.csv", sep = ",", check.names = F, header = T, stringsAsFactors = F)
+cellline = ic50[,c("Cell line name", "Tissue")]
+cellline = cellline[!duplicated(cellline),]
+
+for (tissue in unique(cellline$Tissue)){
+  filename = paste0("../data/iprofun/iprofun_permutate_result_", tissue, "_10.rds")
+  result = readRDS(filename)
+  gene_cna = as.data.frame(result$Gene_fdr[1])
+  gene_methy = as.data.frame(result$Gene_fdr[2])
+  
+  cna_atten = as.character(gene_cna[(gene_cna$Y1==1) & (gene_cna$Y2==0), "V1"])
+  methy_atten = as.character(gene_methy[(gene_methy$Y1==1) & (gene_methy$Y2==0), "V1"])
+  
+  cna_genes = as.integer(gene_cna$V1 %in% cna_atten)
+  names(cna_genes) = gene_cna$V1
+  
+  methy_genes = as.integer(gene_methy$V1 %in% methy_atten)
+  names(methy_genes) = gene_methy$V1
+  
+  pwf_cna = nullp(cna_genes,"hg19","geneSymbol")
+  GO.wall.cna=goseq(pwf_cna,"hg19","geneSymbol")
+  write.table(GO.wall.cna, paste0("../data/iprofun/goseq/", tissue, "_cna.tsv"), sep="\t", row.names = F)
+  
+  pwf_methy = nullp(methy_genes,"hg19","geneSymbol")
+  GO.wall.methy=goseq(pwf_methy,"hg19","geneSymbol")
+  write.table(GO.wall.methy, paste0("../data/iprofun/goseq/", tissue, "_methy.tsv"), sep="\t", row.names = F)
+}
+```
+
+#-------blood---------
+```{r}
+gene_cna_blood = as.data.frame(iprofun_permutate_result_blood_10$Gene_fdr[1])
+gene_methy_blood = as.data.frame(iprofun_permutate_result_blood_10$Gene_fdr[2])
+
+cna_post_blood = as.data.frame(iprofun_permutate_result_blood_10$PostProb_original[1])
+
+gene_cna_lung = as.data.frame(iprofun_permutate_result_lung_10$Gene_fdr[1])
+gene_methy_lung = as.data.frame(iprofun_permutate_result_lung_10$Gene_fdr[2])
+
+cna_post_lung = as.data.frame(iprofun_permutate_result_lung_10$PostProb_original[1])
+
+gene_cna = as.data.frame(result$Gene_fdr[1])
+gene_methy = as.data.frame(result$Gene_fdr[2])
+
+cna_post = as.data.frame(result$PostProb_original[1])
+```
+

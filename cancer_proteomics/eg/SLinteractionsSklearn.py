@@ -22,151 +22,22 @@ import logging
 import numpy as np
 import pandas as pd
 import pkg_resources
+import seaborn as sns
 from crispy import QCplot
+import matplotlib.pyplot as plt
 from scipy.stats import chi2
 from natsort import natsorted
 from crispy.GIPlot import GIPlot
-import seaborn as sns
-import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
+from crispy.LMModels import LMModels, LModel
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LinearRegression
-from cancer_proteomics.eg.LMModels import LMModels
 from statsmodels.stats.multitest import multipletests
 from crispy.DataImporter import Proteomics, CRISPR, GeneExpression, DrugResponse, Sample
 
 
 LOG = logging.getLogger("Crispy")
 RPATH = pkg_resources.resource_filename("reports", "eg/")
-
-
-class LModel:
-    def __init__(
-        self,
-        Y,
-        X,
-        M,
-        M2=None,
-        normalize=False,
-        fit_intercept=True,
-        copy_X=True,
-        n_jobs=4,
-        verbose=1,
-    ):
-        self.samples = set.intersection(
-            set(Y.index),
-            set(X.index),
-            set(M.index),
-            set(Y.index) if M2 is None else set(M2.index),
-        )
-
-        self.X = X.loc[self.samples]
-        self.X = self.X.loc[:, self.X.count() > (M.shape[1] + (1 if M2 is None else 2))]
-        self.X_ma = np.ma.masked_invalid(self.X.values)
-
-        self.Y = Y.loc[self.samples]
-        self.Y = self.Y.loc[:, self.Y.std() > 0]
-
-        self.M = M.loc[self.samples]
-
-        self.M2 = M2.loc[self.samples, self.X.columns] if M2 is not None else M2
-
-        self.normalize = normalize
-        self.fit_intercept = fit_intercept
-        self.copy_X = copy_X
-        self.n_jobs = n_jobs
-
-        self.verbose = verbose
-        self.log = logging.getLogger("Crispy")
-
-    def model_regressor(self):
-        regressor = LinearRegression(
-            fit_intercept=self.fit_intercept,
-            normalize=self.normalize,
-            copy_X=self.copy_X,
-            n_jobs=self.n_jobs,
-        )
-        return regressor
-
-    @staticmethod
-    def loglike(y_true, y_pred):
-        nobs = len(y_true)
-        nobs2 = nobs / 2.0
-
-        ssr = np.power(y_true - y_pred, 2).sum()
-
-        llf = -nobs2 * np.log(2 * np.pi) - nobs2 * np.log(ssr / nobs) - nobs2
-
-        return llf
-
-    def fit_matrix(self):
-        lms = []
-
-        # x_idx, x_var, y_var = 3167, "VIM", "BAX"
-        for x_idx, x_var in enumerate(self.X):
-            if self.verbose > 0:
-                self.log.info(f"LM={x_var} ({x_idx})")
-
-            # Mask NaNs
-            x_ma = np.ma.mask_rowcols(self.X_ma[:, [x_idx]], axis=0)
-
-            # Build matrices
-            x = self.X.iloc[~x_ma.mask.any(axis=1), x_idx]
-            x = pd.DataFrame(
-                StandardScaler().fit_transform(x.to_frame()),
-                index=x.index,
-                columns=[x_var],
-            )
-
-            y = self.Y.iloc[~x_ma.mask.any(axis=1), :]
-            y = pd.DataFrame(
-                StandardScaler().fit_transform(y), index=y.index, columns=y.columns
-            )
-
-            # Covariate matrix (remove invariable features and add noise)
-            m = self.M.iloc[~x_ma.mask.any(axis=1), :]
-            if self.M2 is not None:
-                m2 = self.M2.iloc[~x_ma.mask.any(axis=1), x_idx]
-                m2 = pd.DataFrame(
-                    StandardScaler().fit_transform(m2.to_frame()),
-                    index=m2.index,
-                    columns=[x_var],
-                )
-                m = pd.concat([m2, m], axis=1)
-            m = m.loc[:, m.std() > 0]
-            m += np.random.normal(0, 1e-4, m.shape)
-
-            # Fit covariate model
-            lm_small = self.model_regressor().fit(m, y)
-            lm_small_ll = self.loglike(y, lm_small.predict(m))
-
-            # Fit full model: covariates + feature
-            lm_full_x = np.concatenate([m, x], axis=1)
-            lm_full = self.model_regressor().fit(lm_full_x, y)
-            lm_full_ll = self.loglike(y, lm_full.predict(lm_full_x))
-
-            # Log-ratio test
-            lr = 2 * (lm_full_ll - lm_small_ll)
-            lr_pval = chi2(1).sf(lr)
-
-            # Assemble + append results
-            res = pd.DataFrame(
-                dict(
-                    y=y.columns,
-                    x=x_var,
-                    n=len(x),
-                    b=lm_full.coef_[:, -1],
-                    lr=lr.values,
-                    covs=m.shape[1],
-                    pval=lr_pval,
-                    fdr=multipletests(lr_pval, method="fdr_bh")[1],
-                )
-            )
-            lms.append(res)
-
-        lms = pd.concat(lms, ignore_index=True).sort_values("pval")
-
-        return lms
 
 
 if __name__ == "__main__":
@@ -201,7 +72,14 @@ if __name__ == "__main__":
 
     drespo = drespo_obj.filter()
     drespo.index = [";".join(map(str, i)) for i in drespo.index]
-    drespo = drespo.drop(["2638;AZD5991;GDSC2", "2459;Rabusertib;GDSC2", "2502;CCT241533;GDSC2", "2265;Galunisertib;GDSC2"])
+    drespo = drespo.drop(
+        [
+            "2638;AZD5991;GDSC2",
+            "2459;Rabusertib;GDSC2",
+            "2502;CCT241533;GDSC2",
+            "2265;Galunisertib;GDSC2",
+        ]
+    )
     LOG.info(f"Drug: {drespo.shape}")
 
     # Drug PCA
@@ -215,13 +93,18 @@ if __name__ == "__main__":
     drug_pca = PCA(n_components=n_components).fit(drespo_fillna.T)
     drug_vexp = pd.Series(drug_pca.explained_variance_ratio_, index=pc_labels)
     drug_pcs = pd.DataFrame(
-        drug_pca.transform(drespo_fillna.T), index=drespo_fillna.columns, columns=pc_labels
+        drug_pca.transform(drespo_fillna.T),
+        index=drespo_fillna.columns,
+        columns=pc_labels,
     )
 
-    drug_pca_df = pd.concat([
-        Sample().samplesheet.reindex(index=drug_pcs.index, columns=["growth"]),
-        drug_pcs,
-    ], axis=1)
+    drug_pca_df = pd.concat(
+        [
+            Sample().samplesheet.reindex(index=drug_pcs.index, columns=["growth"]),
+            drug_pcs,
+        ],
+        axis=1,
+    )
 
     #
     g = sns.clustermap(
@@ -235,22 +118,14 @@ if __name__ == "__main__":
         figsize=(3, 3),
     )
 
-    plt.savefig(
-        f"{RPATH}/drug_pca_clustermap.pdf",
-        bbox_inches="tight",
-        dpi=600,
-    )
+    plt.savefig(f"{RPATH}/drug_pca_clustermap.pdf", bbox_inches="tight", dpi=600)
     plt.close("all")
 
     #
     y_var = "PC1"
     g = GIPlot.gi_regression("growth", y_var, drug_pca_df, lowess=True)
     g.set_axis_labels("Growth rate", f"{y_var} ({drug_vexp[y_var]*100:.1f}%)")
-    plt.savefig(
-        f"{RPATH}/drug_pca_regression_growth.pdf",
-        bbox_inches="tight",
-        dpi=600,
-    )
+    plt.savefig(f"{RPATH}/drug_pca_regression_growth.pdf", bbox_inches="tight", dpi=600)
     plt.close("all")
 
     # Covariates
@@ -267,9 +142,7 @@ if __name__ == "__main__":
     )
     covs_crispr = covs_crispr.reindex(samples_crispr).dropna()
     samples_crispr = set(covs_crispr.index)
-    LOG.info(
-        f"CRISPR: Samples={len(samples_crispr)}; Covs={covs_crispr.shape[1]}"
-    )
+    LOG.info(f"CRISPR: Samples={len(samples_crispr)}; Covs={covs_crispr.shape[1]}")
 
     # Drug
     covs_drug = LMModels.define_covariates(
@@ -299,9 +172,7 @@ if __name__ == "__main__":
 
     genes_crispr = set(gexp.index).intersection(proteins_crispr)
     genes_drug = set(gexp.index).intersection(proteins_drug)
-    LOG.info(
-        f"Gexp after filter: CRISPR={len(genes_crispr)}; Drug={len(genes_drug)}"
-    )
+    LOG.info(f"Gexp after filter: CRISPR={len(genes_crispr)}; Drug={len(genes_drug)}")
 
     # Gene expression samples overlap
     #
@@ -359,7 +230,9 @@ if __name__ == "__main__":
 
     # LMs: Drug
     #
-    drespo_meas = pd.Series({d: ";".join(drespo.loc[d].dropna().index) for d in drespo.index})
+    drespo_meas = pd.Series(
+        {d: ";".join(drespo.loc[d].dropna().index) for d in drespo.index}
+    )
 
     drespo_group = drespo.count(1).rename("count")
     drespo_group = drespo_group.to_frame().assign(drug_id=drespo_group.index)

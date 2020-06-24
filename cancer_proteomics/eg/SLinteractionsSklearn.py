@@ -136,7 +136,7 @@ if __name__ == "__main__":
         institute=crispr_obj.merged_institute,
         medium=True,
         cancertype=False,
-        tissuetype=True,
+        tissuetype=False,
         mburden=False,
         ploidy=True,
     )
@@ -149,7 +149,7 @@ if __name__ == "__main__":
         institute=False,
         medium=True,
         cancertype=False,
-        tissuetype=True,
+        tissuetype=False,
         mburden=False,
         ploidy=True,
     )

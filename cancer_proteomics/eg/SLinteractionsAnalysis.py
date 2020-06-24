@@ -36,7 +36,6 @@ from adjustText import adjust_text
 from crispy.MOFA import MOFA, MOFAPlot
 from sklearn.metrics.ranking import auc
 from crispy.Enrichment import Enrichment
-from pathlib import Path, PurePath
 from scipy.stats import pearsonr, spearmanr, skew
 from eg.CProtUtils import two_vars_correlation
 from sklearn.preprocessing import MinMaxScaler
@@ -196,32 +195,27 @@ if __name__ == "__main__":
 
     # CORUM
     sl_lm["corum"] = [
-        int((p1, p2) in corum_db.db_melt_symbol) for p1, p2 in sl_lm[["y", "x"]].values
+        int((p1, p2) in corum_db.db_melt_symbol) for p1, p2 in sl_lm[["y_id", "x_id"]].values
     ]
 
     # BioGRID
     sl_lm["biogrid"] = [
-        int((p1, p2) in biogrid_db.biogrid) for p1, p2 in sl_lm[["y", "x"]].values
+        int((p1, p2) in biogrid_db.biogrid) for p1, p2 in sl_lm[["y_id", "x_id"]].values
     ]
 
     # HuRI
     sl_lm["huri"] = [
-        int((p1, p2) in huri_db.huri) for p1, p2 in sl_lm[["y", "x"]].values
+        int((p1, p2) in huri_db.huri) for p1, p2 in sl_lm[["y_id", "x_id"]].values
     ]
 
-    # String distance
-    ppi = PPI().build_string_ppi(score_thres=900)
-    sl_lm = PPI.ppi_annotation(sl_lm, ppi, x_var="x", y_var="y", ppi_var="string_dist")
-    sl_lm = sl_lm.assign(string=(sl_lm["string_dist"] == "1").astype(int))
-
     # Attenuated protein
-    sl_lm["attenuated"] = sl_lm["x"].isin(patt_high).astype(int)
+    sl_lm["attenuated"] = sl_lm["x_id"].isin(patt_high).astype(int)
 
     # Strongly selective CRISPR
-    sl_lm["crispr_selective"] = sl_lm["y"].isin(crispr_selective_set).astype(int)
+    sl_lm["crispr_selective"] = sl_lm["y_id"].isin(crispr_selective_set).astype(int)
 
     # R-squared
-    sl_lm["r2"] = ml_scores.loc[sl_lm["y"], "prot"].values
+    sl_lm["r2"] = ml_scores.loc[sl_lm["y_id"], "prot"].values
 
     # Export annotated table
     sl_lm.to_csv(f"{RPATH}/{sl_file}_annotated.csv.gz", compression="gzip", index=False)
@@ -230,14 +224,14 @@ if __name__ == "__main__":
     # Feature importance matrix
     sl_lm_fimpor = dict(
         prot=pd.pivot_table(
-            sl_lm, index="x", columns="y", values="b", fill_value=np.nan
+            sl_lm, index="x_id", columns="y_id", values="beta", fill_value=np.nan
         )
     )
 
     # ML + LM
     #
     nassoc_df = pd.concat(
-        [ml_scores, sl_lm.query("fdr < .1")["y"].value_counts().rename("nassoc")],
+        [ml_scores, sl_lm.groupby("y_id")["fdr"].min().rename("nassoc")],
         axis=1,
     ).fillna(0)
 
@@ -292,10 +286,10 @@ if __name__ == "__main__":
 
     _, ax = plt.subplots(1, 1, figsize=(4.5, 2.5), dpi=600)
 
-    for t, df in plot_df.groupby("string_dist"):
+    for t, df in plot_df.groupby("ppi"):
         sc = ax.scatter(
             -np.log10(df["pval"]),
-            df["b"],
+            df["beta"],
             s=s_transform.fit_transform(df[["n"]]),
             color=GIPlot.PPI_PAL[t],
             label=t,
@@ -345,12 +339,12 @@ if __name__ == "__main__":
     # Top associations
     #
     for gene in ["FOXA1", "PAX8", "PAX5", "BCL2", "TTC7A", "MYCN"]:
-        plot_df = hits.query(f"y == '{gene}'").head(10).reset_index(drop=True).reset_index()
+        plot_df = hits.query(f"y_id == '{gene}'").head(10).reset_index(drop=True).reset_index()
         plot_df = plot_df.assign(logpval=-np.log10(plot_df["pval"]).values)
 
         fig, ax = plt.subplots(1, 1, figsize=(plot_df.shape[0] * .2, 1.5))
 
-        for t, df in plot_df.groupby("string_dist"):
+        for t, df in plot_df.groupby("ppi"):
             ax.bar(
                 df["index"].values,
                 df["logpval"].values,
@@ -360,7 +354,7 @@ if __name__ == "__main__":
                 linewidth=0,
             )
 
-        for g, p in plot_df[["x", "index"]].values:
+        for g, p in plot_df[["x_id", "index"]].values:
             ax.text(
                 p,
                 0.1,
@@ -373,7 +367,7 @@ if __name__ == "__main__":
                 color="white",
             )
 
-        for x, y, t, b in plot_df[["index", "logpval", "string_dist", "b"]].values:
+        for x, y, t, b in plot_df[["index", "logpval", "ppi", "beta"]].values:
             c = GIPlot.PAL_DTRACE[0] if t == "T" else GIPlot.PAL_DTRACE[2]
 
             ax.text(x, y + 0.25, t, color=c, ha="center", fontsize=6, zorder=10)
@@ -410,7 +404,7 @@ if __name__ == "__main__":
     ]
 
     for p, c in gi_pairs:
-        # p, c = "LMNA", "PAX5"
+        # p, c = "CD44", "MYCN"
         plot_df = pd.concat(
             [
                 crispr.loc[[c]].T.add_suffix("_crispr"),

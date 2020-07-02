@@ -22,12 +22,14 @@ import logging
 import numpy as np
 import pandas as pd
 import pkg_resources
+import seaborn as sns
 import matplotlib.pyplot as plt
 from GIPlot import GIPlot
 from crispy.Utils import Utils
 from crispy.CrispyPlot import CrispyPlot
 from sklearn.mixture import GaussianMixture
 from eg.CProtUtils import two_vars_correlation
+from crispy.Enrichment import Enrichment, SSGSEA
 from crispy.DataImporter import Proteomics, GeneExpression, CopyNumber
 
 
@@ -78,17 +80,11 @@ if __name__ == "__main__":
         {
             s: pd.concat(
                 [
-                    pd.Series(two_vars_correlation(cnv[s], prot[s])).add_prefix(
-                        "prot_"
-                    ),
-                    pd.Series(two_vars_correlation(cnv[s], prot_broad[s])).add_prefix(
-                        "prot_broad_"
-                    )
-                    if s in prot_broad
-                    else pd.Series(),
-                    pd.Series(two_vars_correlation(cnv[s], gexp_t[s])).add_prefix(
-                        "gexp_"
-                    ),
+                    pd.Series(two_vars_correlation(cnv[s], prot[s])).add_prefix("prot_"),
+                    pd.Series(two_vars_correlation(cnv[s], prot_broad[s])).add_prefix("prot_broad_") if s in prot_broad else pd.Series(),
+                    pd.Series(two_vars_correlation(cnv[s], gexp_t[s])).add_prefix("gexp_"),
+                    pd.Series(two_vars_correlation(gexp_t[s], prot[s])).add_prefix("gexp_prot_"),
+                    pd.Series(two_vars_correlation(gexp_t[s], prot_broad[s])).add_prefix("gexp_prot_broad_") if s in prot_broad else pd.Series(),
                 ]
             )
             for s in samples
@@ -98,7 +94,7 @@ if __name__ == "__main__":
     satt_corr["attenuation"] = satt_corr.eval("gexp_corr - prot_corr")
     satt_corr["attenuation_broad"] = satt_corr.eval("gexp_corr - prot_broad_corr")
 
-    #
+    # Discretise attenuated samples
     gmm = GaussianMixture(n_components=2, means_init=[[0], [0.4]]).fit(
         satt_corr[["attenuation"]]
     )
@@ -110,9 +106,45 @@ if __name__ == "__main__":
         "High" if s_type[p] == clusters.argmax() else "Low" for p in satt_corr.index
     ]
 
+    # Pathway enrichment
+    emt_sig = Enrichment.read_gmt(f"{DPATH}/pathways/emt.symbols.gmt", min_size=0)
+    emt_enr = pd.Series({s: SSGSEA.gsea(gexp[s], emt_sig["HALLMARK_EPITHELIAL_MESENCHYMAL_TRANSITION"])[0] for s in gexp})
+
+    proteasome_sig = Enrichment.read_gmt(f"{DPATH}/pathways/proteasome.symbols.gmt", min_size=0)
+    proteasome_enr = pd.Series({s: SSGSEA.gsea(prot[s].dropna(), proteasome_sig["BIOCARTA_PROTEASOME_PATHWAY"])[0] for s in prot})
+    proteasome_enr_broad = pd.Series({s: SSGSEA.gsea(prot_broad[s].dropna(), proteasome_sig["BIOCARTA_PROTEASOME_PATHWAY"])[0] for s in prot_broad})
+
+    translation_sig = Enrichment.read_gmt(f"{DPATH}/pathways/translation_initiation.symbols.gmt", min_size=0)
+    translation_enr = pd.Series({s: SSGSEA.gsea(prot[s].dropna(), translation_sig["GO_TRANSLATIONAL_INITIATION"])[0] for s in prot})
+    translation_enr_broad = pd.Series({s: SSGSEA.gsea(prot_broad[s].dropna(), translation_sig["GO_TRANSLATIONAL_INITIATION"])[0] for s in prot_broad})
+
+    # Annotate samples with cell line information
+    cfeatures = pd.concat(
+        [
+            emt_enr.rename("EMT"),
+            proteasome_enr.rename("Proteasome"),
+            proteasome_enr_broad.rename("Proteasome_broad"),
+            translation_enr.rename("TranslationInitiation"),
+            translation_enr_broad.rename("TranslationInitiation_broad"),
+            CopyNumber().genomic_instability().rename("CopyNumberInstability"),
+            pd.get_dummies(prot_obj.ss["msi_status"])["MSI"],
+            pd.get_dummies(prot_obj.ss["media"]),
+            pd.get_dummies(prot_obj.ss["growth_properties"]),
+            pd.get_dummies(prot_obj.ss["tissue"])[["Haematopoietic and Lymphoid", "Lung"]],
+            prot_obj.ss.reindex(columns=["ploidy", "mutational_burden", "size", "growth"]),
+            prot_obj.reps.rename("RepsCorrelation"),
+            prot_obj.protein_raw.median().rename("MedianProteomics"),
+        ],
+        axis=1,
+    ).reindex(satt_corr.index)
+
+    satt_corr = pd.concat([satt_corr, cfeatures], axis=1)
+
+    # Export
     satt_corr.to_csv(
         f"{RPATH}/SampleProteinTranscript_attenuation.csv.gz", compression="gzip"
     )
+    # satt_corr = pd.read_csv(f"{RPATH}/SampleProteinTranscript_attenuation.csv.gz", index_col=0)
 
     # Scatter
     for y_var in ["prot_corr", "prot_broad_corr"]:
@@ -129,14 +161,56 @@ if __name__ == "__main__":
         )
         plt.close("all")
 
-    # Attenuation regression
-    g = GIPlot.gi_regression("prot_corr", "prot_broad_corr", satt_corr)
-    g.set_axis_labels(
-        "Sanger&CMRI\nProtein ~ Copy number (Pearson's R)",
-        "Broad\nProtein ~ Copy number (Pearson's R)"
+    # Clustermap
+    plot_df = satt_corr[["attenuation", "attenuation_broad", "gexp_prot_corr", "gexp_prot_broad_corr"] + list(cfeatures.columns)]
+    plot_df = plot_df.corr()
+
+    fig = sns.clustermap(
+        plot_df,
+        cmap="Spectral",
+        center=0,
+        annot=True,
+        fmt=".2f",
+        annot_kws={"size": 5},
+        linewidth=0.3,
+        cbar_pos=None,
+        figsize=np.array(plot_df.shape) * 0.275,
+    )
+
+    plt.savefig(
+        f"{RPATH}/ProteinTranscriptSample_cfeatures_clustermap.pdf",
+        bbox_inches="tight",
+        transparent=True,
+    )
+    plt.close("all")
+
+    #
+    for z_var in ["CopyNumberInstability", "ploidy"]:
+        ax = GIPlot.gi_continuous_plot(
+            "prot_corr",
+            "gexp_prot_corr",
+            z_var,
+            satt_corr, mid_point_norm=False
+        )
+        ax.set_xlabel("Sanger&CMRI\nProtein ~ Copy number (Pearson's R)")
+        ax.set_ylabel("Sanger&CMRI\nProtein ~ Transcript (Pearson's R)")
+        plt.savefig(
+            f"{RPATH}/ProteinTranscriptSample_prot_gexp_regression_{z_var}.pdf",
+            bbox_inches="tight",
+        )
+        plt.close("all")
+
+    #
+    x_var, y_var, z_var = "ploidy", "CopyNumberInstability", "size"
+    ax = GIPlot.gi_continuous_plot(
+        x_var,
+        y_var,
+        z_var,
+        satt_corr, mid_point_norm=False
     )
     plt.savefig(
-        f"{RPATH}/ProteinTranscriptSample_attenuation_regression.pdf",
+        f"{RPATH}/ProteinTranscriptSample_regression_{x_var}_{y_var}_{z_var}.pdf",
         bbox_inches="tight",
     )
     plt.close("all")
+

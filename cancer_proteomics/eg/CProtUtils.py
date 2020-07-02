@@ -12,7 +12,13 @@ from scipy.stats import spearmanr, pearsonr
 from sklearn.decomposition import PCA, FactorAnalysis
 
 
-def two_vars_correlation(var1, var2, idx_set=None, method="pearson"):
+LOG = logging.getLogger("Crispy")
+
+
+def two_vars_correlation(var1, var2, idx_set=None, method="pearson", verbose=0):
+    if verbose > 0:
+        LOG.info(f"Var1={var1.name}; Var2={var2.name}")
+
     if idx_set is None:
         idx_set = set(var1.dropna().index).intersection(var2.dropna().index)
 

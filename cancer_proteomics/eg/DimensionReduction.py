@@ -66,7 +66,6 @@ if __name__ == "__main__":
 
     cn = cn_obj.filter(subset=samples)
     cn = cn.loc[cn.std(1) > 0]
-    cn_inst = cn_obj.genomic_instability()
     LOG.info(f"Copy-Number: {cn.shape}")
 
     mobem = mobem_obj.filter(subset=samples)
@@ -93,17 +92,21 @@ if __name__ == "__main__":
 
     covariates = pd.concat(
         [
-            s_pg_corr["attenuation"].rename("Attenuation"),
-            cn_inst.rename("Genomic instability"),
+            s_pg_corr["attenuation"].rename("CopyNumberAttenuation"),
+            s_pg_corr["gexp_prot_corr"].rename("GeneExpressionAttenuation"),
+            s_pg_corr["EMT"],
+            s_pg_corr["Proteasome"],
+            s_pg_corr["Proteasome_broad"],
+            s_pg_corr["TranslationInitiation"],
+            s_pg_corr["TranslationInitiation_broad"],
+            s_pg_corr["CopyNumberInstability"],
             prot.loc[["CDH1", "VIM"]].T.add_suffix("_prot"),
             gexp.loc[["CDH1", "VIM"]].T.add_suffix("_gexp"),
             pd.get_dummies(prot_obj.ss["media"]),
             pd.get_dummies(prot_obj.ss["growth_properties"]),
-            pd.get_dummies(prot_obj.ss["tissue"])[
-                ["Haematopoietic and Lymphoid", "Lung"]
-            ],
+            pd.get_dummies(prot_obj.ss["tissue"])[["Haematopoietic and Lymphoid", "Lung"]],
             prot_obj.ss.reindex(
-                index=samples, columns=["ploidy", "mutational_burden", "growth"]
+                index=samples, columns=["ploidy", "mutational_burden", "growth", "size"]
             ),
             prot_obj.reps.rename("RepsCorrelation"),
             prot_obj.protein_raw.median().rename("MedianProteomics"),
@@ -233,11 +236,11 @@ if __name__ == "__main__":
             .sort_values("pval")
             .dropna()
         )
-        dsets_covs[dtype].to_csv(
-            f"{RPATH}/DimRed_pcs_covariates_corr_{dtype}.csv.gz",
-            index=False,
-            compression="gzip",
-        )
+        # dsets_covs[dtype].to_csv(
+        #     f"{RPATH}/DimRed_pcs_covariates_corr_{dtype}.csv.gz",
+        #     index=False,
+        #     compression="gzip",
+        # )
 
         # Plot
         df_vexp = dsets_dred[dtype]["vexp"][pcs_order]
@@ -292,7 +295,7 @@ if __name__ == "__main__":
 
         plt.subplots_adjust(hspace=0.01)
         plt.savefig(
-            f"{RPATH}/DimRed_pcs_covariates_corr_{dtype}_covariates_heatmap.pdf",
+            f"{RPATH}/DimReduction_pcs_covariates_corr_{dtype}_covariates_heatmap.pdf",
             bbox_inches="tight",
             transparent=True,
         )
@@ -324,7 +327,7 @@ if __name__ == "__main__":
             ]
         ).sort_values("pval")
         pcs_corr.to_csv(
-            f"{RPATH}/DimRed_pcs_corr_{x_dtype}_{y_dtype}.csv.gz",
+            f"{RPATH}/DimReduction_pcs_corr_{x_dtype}_{y_dtype}.csv.gz",
             index=False,
             compression="gzip",
         )
@@ -349,53 +352,54 @@ if __name__ == "__main__":
         )
 
         plt.savefig(
-            f"{RPATH}/DimRed_pcs_corr_{x_dtype}_{y_dtype}_clustermap.pdf",
+            f"{RPATH}/DimReduction_pcs_corr_{x_dtype}_{y_dtype}_clustermap.pdf",
             bbox_inches="tight",
             transparent=True,
         )
         plt.close("all")
 
     # PCs regression
-    for x_dtype, x_pc, y_dtype, y_pc in [
-        ("prot_culture_reps_emt", "PC1", "prot_broad_culture_emt", "PC1"),
-        ("prot_culture_reps_emt", "PC1", "prot_broad_culture_emt", "PC2"),
-        ("prot_culture_reps_emt", "PC2", "prot_broad_culture_emt", "PC1"),
-        ("prot_culture_reps_emt", "PC2", "prot_broad_culture_emt", "PC2"),
-        ("prot_culture_reps", "PC1", "prot_broad_culture", "PC1"),
-        ("prot_culture_reps", "PC2", "prot_broad_culture", "PC1"),
-    ]:
-        plot_df = pd.concat(
-            [
-                dsets_dred[x_dtype]["pcs"][x_pc].rename(f"{x_dtype} {x_pc}"),
-                dsets_dred[y_dtype]["pcs"][y_pc].rename(f"{y_dtype} {y_pc}"),
-                covariates["Attenuation"],
-            ],
-            axis=1,
-        ).dropna()
+    for z_var in ["CopyNumberAttenuation", "GeneExpressionAttenuation"]:
+        for x_dtype, x_pc, y_dtype, y_pc in [
+            ("prot_culture_reps_emt", "PC1", "prot_broad_culture_emt", "PC1"),
+            ("prot_culture_reps_emt", "PC1", "prot_broad_culture_emt", "PC2"),
+            ("prot_culture_reps_emt", "PC2", "prot_broad_culture_emt", "PC1"),
+            ("prot_culture_reps_emt", "PC2", "prot_broad_culture_emt", "PC2"),
+            ("prot_culture_reps", "PC1", "prot_broad_culture", "PC1"),
+            ("prot_culture_reps", "PC2", "prot_broad_culture", "PC1"),
+        ]:
+            plot_df = pd.concat(
+                [
+                    dsets_dred[x_dtype]["pcs"][x_pc].rename(f"{x_dtype} {x_pc}"),
+                    dsets_dred[y_dtype]["pcs"][y_pc].rename(f"{y_dtype} {y_pc}"),
+                    covariates[z_var],
+                ],
+                axis=1,
+            ).dropna()
 
-        ax = GIPlot.gi_continuous_plot(
-            f"{x_dtype} {x_pc}",
-            f"{y_dtype} {y_pc}",
-            "Attenuation",
-            plot_df,
-            plot_reg=True,
-            lowess=True,
-            mid_point_norm=False,
-            cbar_label="Protein attenuation",
-        )
-        ax.set_xlabel(
-            f"{x_dtype} {x_pc} ({dsets_dred[x_dtype]['vexp'][x_pc]*100:.1f}%)"
-        )
-        ax.set_ylabel(
-            f"{y_dtype} {y_pc} ({dsets_dred[y_dtype]['vexp'][y_pc]*100:.1f}%)"
-        )
-        ax.set_title("Proteomics PCs")
-        plt.savefig(
-            f"{RPATH}/DimReduction_pcs_regression_{x_dtype}_{x_pc}_{y_dtype}_{y_pc}.pdf",
-            bbox_inches="tight",
-            transparent=True,
-        )
-        plt.close("all")
+            ax = GIPlot.gi_continuous_plot(
+                f"{x_dtype} {x_pc}",
+                f"{y_dtype} {y_pc}",
+                z_var,
+                plot_df,
+                plot_reg=True,
+                lowess=True,
+                mid_point_norm=False,
+                cbar_label=z_var,
+            )
+            ax.set_xlabel(
+                f"{x_dtype} {x_pc} ({dsets_dred[x_dtype]['vexp'][x_pc]*100:.1f}%)"
+            )
+            ax.set_ylabel(
+                f"{y_dtype} {y_pc} ({dsets_dred[y_dtype]['vexp'][y_pc]*100:.1f}%)"
+            )
+            ax.set_title("Proteomics PCs")
+            plt.savefig(
+                f"{RPATH}/DimReduction_pcs_regression_{x_dtype}_{x_pc}_{y_dtype}_{y_pc}_{z_var}.pdf",
+                bbox_inches="tight",
+                transparent=True,
+            )
+            plt.close("all")
 
     # PCs enrichment
     #
@@ -435,7 +439,7 @@ if __name__ == "__main__":
         ignore_index=True,
     )
     enr_pcs = enr_pcs.rename(columns={"sample1": "nes"}).sort_values("nes")
-    enr_pcs.to_csv(f"{RPATH}/DimRed_pcs_enr.csv.gz", compression="gzip", index=False)
+    enr_pcs.to_csv(f"{RPATH}/DimReduction_pcs_enr.csv.gz", compression="gzip", index=False)
 
     # Plot
     enr_pcs_plt = [
@@ -515,7 +519,7 @@ if __name__ == "__main__":
         ax.set_title(f"PCs enrichment scores (NES)")
 
         plt.savefig(
-            f"{RPATH}/DimRed_pcs_enr_{x_dtype}_{x_pc}_{y_dtype}_{y_pc}.pdf",
+            f"{RPATH}/DimReduction_pcs_enr_{x_dtype}_{x_pc}_{y_dtype}_{y_pc}.pdf",
             bbox_inches="tight",
         )
         plt.close("all")

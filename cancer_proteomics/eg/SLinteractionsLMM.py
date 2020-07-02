@@ -18,11 +18,23 @@
 # %load_ext autoreload
 # %autoreload 2
 
+import gseapy
 import logging
+import numpy as np
 import pandas as pd
 import pkg_resources
+import seaborn as sns
+import matplotlib as mpl
+import matplotlib.colors as colors
+import matplotlib.pyplot as plt
+from GIPlot import GIPlot
+from adjustText import adjust_text
 from sklearn.decomposition import PCA
+from crispy.CrispyPlot import CrispyPlot
 from crispy.LMModels import LMModels, LModel
+from crispy.Enrichment import Enrichment, SSGSEA
+from eg.CProtUtils import two_vars_correlation
+from crispy.Utils import Utils
 from crispy.DataImporter import (
     Proteomics,
     CRISPR,
@@ -32,15 +44,27 @@ from crispy.DataImporter import (
     PPI,
 )
 
-
 LOG = logging.getLogger("Crispy")
+DPATH = pkg_resources.resource_filename("crispy", "data/")
 RPATH = pkg_resources.resource_filename("reports", "eg/")
+TPATH = pkg_resources.resource_filename("tables", "/")
 
 
 if __name__ == "__main__":
     # PPI
     #
     ppi = PPI().build_string_ppi(score_thres=900)
+
+    # Gene information
+    #
+    ginfo = pd.read_csv(f"{TPATH}/mart_export.txt", sep="\t")
+    ginfo["mean_pos"] = ginfo[["Gene end (bp)", "Gene start (bp)"]].mean(1)
+    ginfo = ginfo[ginfo["Chromosome/scaffold name"].isin(Utils.CHR_ORDER)]
+
+    ginfo_pos = pd.concat([
+        ginfo.groupby("Gene name")["Chromosome/scaffold name"].first().rename("chr"),
+        ginfo.groupby("Gene name")["mean_pos"].mean().rename("chr_pos"),
+    ], axis=1)
 
     # Y matrices
     #
@@ -71,23 +95,6 @@ if __name__ == "__main__":
     dtargets.index = [";".join(map(str, i)) for i in dtargets.index]
     LOG.info(f"Drug: {drespo.shape}")
 
-    # Custom features
-    #
-    patt = pd.read_csv(
-        f"{RPATH}/SampleProteinTranscript_attenuation.csv.gz", index_col=0
-    )
-    cins = CopyNumber().genomic_instability()
-
-    cfeatures = pd.concat(
-        [
-            patt["attenuation"].rename("ProteinAttenuation"),
-            cins.rename("CopyNumberInstability"),
-            pd.get_dummies(prot_obj.ss["msi_status"])["MSI"],
-            prot_obj.ss.reindex(columns=["ploidy", "mutational_burden"]),
-        ],
-        axis=1,
-    ).dropna()
-
     # Covariates
     #
     covariates = pd.concat(
@@ -95,7 +102,6 @@ if __name__ == "__main__":
             prot_obj.ss["growth"],
             pd.get_dummies(prot_obj.ss["media"]),
             pd.get_dummies(prot_obj.ss["growth_properties"]),
-            pd.get_dummies(prot_obj.ss["tissue"])["Haematopoietic and Lymphoid"].rename("Haem"),
             pd.get_dummies(crispr_obj.merged_institute)["Sanger"],
             prot_obj.reps.rename("RepsCorrelation"),
             drespo.mean().rename("MeanIC50"),
@@ -106,10 +112,10 @@ if __name__ == "__main__":
     # Dimension reduction
     #
     gexp_pca = pd.DataFrame(
-        PCA(n_components=30).fit_transform(gexp.T), index=gexp.columns
+        PCA(n_components=10).fit_transform(gexp.T), index=gexp.columns
     ).add_prefix("PC")
 
-    # LMMs: Proteomics
+    # LMs: Proteomics
     #
     X = LMModels.transform_matrix(prot, t_type="None", fillna_func=None).T
     M2 = LMModels.transform_matrix(gexp, t_type="None").T
@@ -119,7 +125,7 @@ if __name__ == "__main__":
     Y = LMModels.transform_matrix(drespo, t_type="None").T
     M = pd.concat([covariates.drop("Sanger", axis=1), gexp_pca], axis=1).dropna()
     samples = set.intersection(set(Y.index), set(X.index), set(M.index), set(M2.index))
-    LOG.info(f"Proteomics ~ Drug: samples={len(samples)}; genes/proteins={len(genes)}")
+    LOG.info(f"Proteomics ~ Drug: samples={len(samples)}; genes/proteins={len(genes)}; covariates={covariates.shape[1]}")
 
     lm_prot_drug = LModel(
         Y=Y.loc[samples],
@@ -132,10 +138,15 @@ if __name__ == "__main__":
     lm_prot_drug = PPI.ppi_annotation(
         lm_prot_drug, ppi, x_var="target", y_var="x_id", ppi_var="ppi"
     )
+    lm_prot_drug = LMModels.multipletests(lm_prot_drug).sort_values("fdr")
+
+    lm_prot_drug["chr"] = ginfo_pos.reindex(lm_prot_drug["x_id"])["chr"].values
+    lm_prot_drug["chr_pos"] = ginfo_pos.reindex(lm_prot_drug["x_id"])["chr_pos"].values
 
     lm_prot_drug.to_csv(
         f"{RPATH}/lm_sklearn_degr_drug.csv.gz", index=False, compression="gzip"
     )
+    # lm_prot_drug = pd.read_csv(f"{RPATH}/lm_sklearn_degr_drug.csv.gz")
 
     # CRISPR
     Y = LMModels.transform_matrix(crispr, t_type="None").T
@@ -155,7 +166,28 @@ if __name__ == "__main__":
     lm_prot_crispr = PPI.ppi_annotation(
         lm_prot_crispr, ppi, x_var="x_id", y_var="y_id", ppi_var="ppi"
     )
+    lm_prot_crispr = LMModels.multipletests(lm_prot_crispr).sort_values("fdr")
+
+    lm_prot_crispr["chr"] = ginfo_pos.reindex(lm_prot_crispr["x_id"])["chr"].values
+    lm_prot_crispr["chr_pos"] = ginfo_pos.reindex(lm_prot_crispr["x_id"])["chr_pos"].values
 
     lm_prot_crispr.to_csv(
         f"{RPATH}/lm_sklearn_degr_crispr.csv.gz", index=False, compression="gzip"
     )
+    # lm_prot_crispr = pd.read_csv(f"{RPATH}/lm_sklearn_degr_crispr.csv.gz")
+
+    # Plots
+    #
+    GIPlot.gi_manhattan(lm_prot_drug)
+    plt.savefig(
+        f"{RPATH}/LM_drug_manhattan_plot.png",
+        bbox_inches="tight",
+    )
+    plt.close("all")
+
+    GIPlot.gi_manhattan(lm_prot_crispr)
+    plt.savefig(
+        f"{RPATH}/LM_crispr_manhattan_plot.png",
+        bbox_inches="tight",
+    )
+    plt.close("all")

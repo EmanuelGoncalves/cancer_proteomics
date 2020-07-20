@@ -113,8 +113,8 @@ if __name__ == "__main__":
 
     # LM associations
     #
-    lm_drug = pd.read_csv(f"{RPATH}/lm_sklearn_degr_drug_annotated.csv.gz")
-    lm_crispr = pd.read_csv(f"{RPATH}/lm_sklearn_degr_crispr_annotated.csv.gz")
+    lm_drug = pd.read_csv(f"{RPATH}/lm_sklearn_degr_drug_per_tissue_annotated.csv.gz")
+    lm_crispr = pd.read_csv(f"{RPATH}/lm_sklearn_degr_crispr_per_tissue_annotated.csv.gz")
 
     # Selective and predictive dependencies
     #
@@ -193,9 +193,10 @@ if __name__ == "__main__":
     tophits_feat_crispr = set(lm_crispr.query(f"fdr < {FDR_THRES}")["x_id"])
     tophits_feat_union = set.union(tophits_feat_drug, tophits_feat_crispr)
 
+    _, ax = plt.subplots(1, 1, figsize=(1.5, 1.5), dpi=600)
     venn_groups = [tophits_feat_drug, tophits_feat_crispr]
-    venn2(venn_groups, set_labels=["Drug", "CRISPR"], set_colors=["#FEC041", "#009EAC"])
-    venn2_circles(venn_groups, linewidth=0.5)
+    venn2(venn_groups, set_labels=["Drug", "CRISPR"], set_colors=["#FEC041", "#009EAC"], ax=ax)
+    venn2_circles(venn_groups, linewidth=0.5, ax=ax)
     plt.title(f"Top protein features (FDR < {FDR_THRES*100:.0f}%)")
     plt.savefig(f"{RPATH}/TopHits_features_venn.pdf", bbox_inches="tight")
     plt.close("all")

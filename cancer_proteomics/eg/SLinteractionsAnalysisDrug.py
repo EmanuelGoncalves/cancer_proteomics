@@ -197,7 +197,7 @@ if __name__ == "__main__":
 
     # Linear regression scores
     #
-    sl_file = "lm_sklearn_degr_drug"
+    sl_file = "lm_sklearn_degr_drug_per_tissue"
     sl_lm = pd.read_csv(f"{RPATH}/{sl_file}.csv.gz")
 
     # Attenuated protein

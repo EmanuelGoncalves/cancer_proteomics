@@ -121,60 +121,73 @@ if __name__ == "__main__":
     M2 = LMModels.transform_matrix(gexp, t_type="None").T
     genes = set.intersection(set(X), set(M2))
 
-    # Drug
-    Y = LMModels.transform_matrix(drespo, t_type="None").T
-    M = pd.concat([covariates.drop("Sanger", axis=1), gexp_pca], axis=1).dropna()
-    samples = set.intersection(set(Y.index), set(X.index), set(M.index), set(M2.index))
-    LOG.info(f"Proteomics ~ Drug: samples={len(samples)}; genes/proteins={len(genes)}; covariates={covariates.shape[1]}")
+    for t, t_df in prot_obj.ss.groupby("tissue"):
+        LOG.info(f"Tissue = {t}")
 
-    lm_prot_drug = LModel(
-        Y=Y.loc[samples],
-        X=X.loc[samples, genes],
-        M=M.loc[samples],
-        M2=M2.loc[samples, genes],
-    ).fit_matrix()
+        # Drug
+        Y = LMModels.transform_matrix(drespo, t_type="None").T
+        M = pd.concat([covariates.drop("Sanger", axis=1), gexp_pca], axis=1).dropna()
+        samples = set.intersection(set(Y.index), set(X.index), set(M.index), set(M2.index), set(t_df.index))
+        LOG.info(f"Proteomics ~ Drug: samples={len(samples)}; genes/proteins={len(genes)}; covariates={covariates.shape[1]}")
 
-    lm_prot_drug["target"] = dtargets.loc[lm_prot_drug["y_id"]].values
-    lm_prot_drug = PPI.ppi_annotation(
-        lm_prot_drug, ppi, x_var="target", y_var="x_id", ppi_var="ppi"
-    )
-    lm_prot_drug = LMModels.multipletests(lm_prot_drug).sort_values("fdr")
+        if len(samples) < 25:
+            LOG.info(f"SKIPPED {t} Drug: samples = {t_df.shape[0]}")
+            continue
 
-    lm_prot_drug["chr"] = ginfo_pos.reindex(lm_prot_drug["x_id"])["chr"].values
-    lm_prot_drug["chr_pos"] = ginfo_pos.reindex(lm_prot_drug["x_id"])["chr_pos"].values
+        lm_prot_drug = LModel(
+            Y=Y.loc[samples],
+            X=X.loc[samples, genes],
+            M=M.loc[samples],
+            M2=M2.loc[samples, genes],
+            verbose=0,
+        ).fit_matrix()
 
-    lm_prot_drug.to_csv(
-        f"{RPATH}/lm_sklearn_degr_drug.csv.gz", index=False, compression="gzip"
-    )
-    # lm_prot_drug = pd.read_csv(f"{RPATH}/lm_sklearn_degr_drug.csv.gz")
+        lm_prot_drug["target"] = dtargets.loc[lm_prot_drug["y_id"]].values
+        lm_prot_drug = PPI.ppi_annotation(
+            lm_prot_drug, ppi, x_var="target", y_var="x_id", ppi_var="ppi"
+        )
+        lm_prot_drug = LMModels.multipletests(lm_prot_drug).sort_values("fdr")
 
-    # CRISPR
-    Y = LMModels.transform_matrix(crispr, t_type="None").T
-    M = pd.concat([covariates.drop("MeanIC50", axis=1), gexp_pca], axis=1).dropna()
-    samples = set.intersection(set(Y.index), set(X.index), set(M.index), set(M2.index))
-    LOG.info(
-        f"Proteomics ~ CRISPR: samples={len(samples)}; genes/proteins={len(genes)}"
-    )
+        lm_prot_drug["chr"] = ginfo_pos.reindex(lm_prot_drug["x_id"])["chr"].values
+        lm_prot_drug["chr_pos"] = ginfo_pos.reindex(lm_prot_drug["x_id"])["chr_pos"].values
 
-    lm_prot_crispr = LModel(
-        Y=Y.loc[samples],
-        X=X.loc[samples, genes],
-        M=M.loc[samples],
-        M2=M2.loc[samples, genes],
-    ).fit_matrix()
+        lm_prot_drug.to_csv(
+            f"{RPATH}/lm_sklearn_degr_drug_{t}.csv.gz", index=False, compression="gzip"
+        )
+        # lm_prot_drug = pd.read_csv(f"{RPATH}/lm_sklearn_degr_drug.csv.gz")
 
-    lm_prot_crispr = PPI.ppi_annotation(
-        lm_prot_crispr, ppi, x_var="x_id", y_var="y_id", ppi_var="ppi"
-    )
-    lm_prot_crispr = LMModels.multipletests(lm_prot_crispr).sort_values("fdr")
+        # CRISPR
+        Y = LMModels.transform_matrix(crispr, t_type="None").T
+        M = pd.concat([covariates.drop("MeanIC50", axis=1), gexp_pca], axis=1).dropna()
+        samples = set.intersection(set(Y.index), set(X.index), set(M.index), set(M2.index), set(t_df.index))
+        LOG.info(
+            f"Proteomics ~ CRISPR: samples={len(samples)}; genes/proteins={len(genes)}"
+        )
 
-    lm_prot_crispr["chr"] = ginfo_pos.reindex(lm_prot_crispr["x_id"])["chr"].values
-    lm_prot_crispr["chr_pos"] = ginfo_pos.reindex(lm_prot_crispr["x_id"])["chr_pos"].values
+        if len(samples) < 25:
+            LOG.info(f"SKIPPED {t} CRISPR: samples = {t_df.shape[0]}")
+            continue
 
-    lm_prot_crispr.to_csv(
-        f"{RPATH}/lm_sklearn_degr_crispr.csv.gz", index=False, compression="gzip"
-    )
-    # lm_prot_crispr = pd.read_csv(f"{RPATH}/lm_sklearn_degr_crispr.csv.gz")
+        lm_prot_crispr = LModel(
+            Y=Y.loc[samples],
+            X=X.loc[samples, genes],
+            M=M.loc[samples],
+            M2=M2.loc[samples, genes],
+            verbose=0,
+        ).fit_matrix()
+
+        lm_prot_crispr = PPI.ppi_annotation(
+            lm_prot_crispr, ppi, x_var="x_id", y_var="y_id", ppi_var="ppi"
+        )
+        lm_prot_crispr = LMModels.multipletests(lm_prot_crispr).sort_values("fdr")
+
+        lm_prot_crispr["chr"] = ginfo_pos.reindex(lm_prot_crispr["x_id"])["chr"].values
+        lm_prot_crispr["chr_pos"] = ginfo_pos.reindex(lm_prot_crispr["x_id"])["chr_pos"].values
+
+        lm_prot_crispr.to_csv(
+            f"{RPATH}/lm_sklearn_degr_crispr_{t}.csv.gz", index=False, compression="gzip"
+        )
+        # lm_prot_crispr = pd.read_csv(f"{RPATH}/lm_sklearn_degr_crispr.csv.gz")
 
     # Plots
     #

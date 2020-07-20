@@ -190,7 +190,7 @@ if __name__ == "__main__":
 
     # Linear regression scores
     #
-    sl_file = "lm_sklearn_degr_crispr"
+    sl_file = "lm_sklearn_degr_crispr_per_tissue"
     sl_lm = pd.read_csv(f"{RPATH}/{sl_file}.csv.gz")
 
     # CORUM

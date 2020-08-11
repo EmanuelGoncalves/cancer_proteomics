@@ -153,7 +153,7 @@ for i in range(NUM_THREAD):
     data.append((next(it), model))
 
 drug_columns_idx = None
-drug_score = pd.read_csv("/home/scai/SangerDrug/data/drug/final_drug_scores.tsv", sep="\t")
+drug_score = pd.read_csv("/home/scai/SangerDrug/data/drug/final_drug_scores_eg_id.tsv", sep="\t")
 selected_drug_ids = drug_score[
     (drug_score['MultiDrug_correlation'] > configs['shap_min_corr']) & (
                 drug_score['sensitive_count'] > configs['shap_min_sensitive'])][

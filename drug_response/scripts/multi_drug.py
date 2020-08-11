@@ -68,7 +68,7 @@ def get_setup():
     else:
         model = MultiDrugResXNN(train_df.shape[1], train_ic50.shape[1],
                                 configs['hidden_width'], configs['hidden_size'], group=configs['group'])
-
+    logger.info(model)
     model = model.to(device)
 
     if 'loss' in configs and configs['loss'] == "corr":

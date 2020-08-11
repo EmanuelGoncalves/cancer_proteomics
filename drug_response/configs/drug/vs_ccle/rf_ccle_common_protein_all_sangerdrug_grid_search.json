@@ -3,7 +3,7 @@
   "data_file": "/home/scai/SangerDrug/data/ccle/protein_matrix_common_ruv.tsv",
   "cell_lines_train": "/home/scai/SangerDrug/data/protein/E0022_P06_Protein_Matrix_ProNorM_no_control_train.txt",
   "cell_lines_test": "/home/scai/SangerDrug/data/protein/E0022_P06_Protein_Matrix_ProNorM_no_control_test.txt",
-  "ic50_file": "/home/scai/SangerDrug/data/drug/drug_final_processed.csv",
+  "ic50_file": "/home/scai/SangerDrug/data/drug/drug_final_processed_eg_id.csv",
   "model": "rf",
   "cv": 5,
   "params_grid": {
@@ -24,5 +24,5 @@
   "sign": 1,
   "save_scores": true,
   "target": "ln_IC50",
-  "suffix": "_ccle_common_zero_300"
+  "suffix": "_ccle_common_zero_300_eg_id"
 }

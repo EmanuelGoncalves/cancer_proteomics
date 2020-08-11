@@ -10,7 +10,6 @@ from scipy.stats import pearsonr
 import time
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
 MAGIC_NUM = -100
 
 
@@ -372,19 +371,22 @@ def train(train_loader, model, criterion, optimizer, epoch, logger):
 
         confs = output.detach().cpu().numpy()
         if not np.isinf(confs).any() and not np.isnan(confs).any():
-            avg_r2.update(np.median(
-                [r2_score(targets[targets[:, i] != MAGIC_NUM, i], confs[targets[:, i] != MAGIC_NUM, i])
-                 for i in range(confs.shape[1])]))
-            avg_mae.update(np.median(
-                [mean_absolute_error(targets[targets[:, i] != MAGIC_NUM, i], confs[targets[:, i] != MAGIC_NUM, i])
-                 for i in range(confs.shape[1])]))
-            avg_rmse.update(np.median(
-                [mean_squared_error(targets[targets[:, i] != MAGIC_NUM, i], confs[targets[:, i] != MAGIC_NUM, i],
-                                    squared=True)
-                 for i in range(confs.shape[1])]))
-            avg_corr.update(np.median(
-                [pearsonr(targets[targets[:, i] != MAGIC_NUM, i], confs[targets[:, i] != MAGIC_NUM, i])[0]
-                 for i in range(confs.shape[1])][0]))
+            try:
+                avg_r2.update(np.median(
+                    [r2_score(targets[targets[:, i] != MAGIC_NUM, i], confs[targets[:, i] != MAGIC_NUM, i])
+                     for i in range(confs.shape[1])]))
+                avg_mae.update(np.median(
+                    [mean_absolute_error(targets[targets[:, i] != MAGIC_NUM, i], confs[targets[:, i] != MAGIC_NUM, i])
+                     for i in range(confs.shape[1])]))
+                avg_rmse.update(np.median(
+                    [mean_squared_error(targets[targets[:, i] != MAGIC_NUM, i], confs[targets[:, i] != MAGIC_NUM, i],
+                                        squared=True)
+                     for i in range(confs.shape[1])]))
+                avg_corr.update(np.median(
+                    [pearsonr(targets[targets[:, i] != MAGIC_NUM, i], confs[targets[:, i] != MAGIC_NUM, i])[0]
+                     for i in range(confs.shape[1])][0]))
+            except ValueError:
+                logger.info("skipping training score")
 
         losses.update(loss.data.item(), input_.size(0))
         optimizer.zero_grad()
@@ -539,6 +541,7 @@ def train_cls(train_loader, model, criterion, optimizer, epoch, logger):
 
     return avg_accuracy.avg
 
+
 def validate_cls(val_loader, model, run, epoch, val_score_dict):
     confs, targets = inference(val_loader, model)
 
@@ -565,11 +568,11 @@ def train_loop_cls(epochs, train_loader, val_loader, model, criterion, optimizer
         if lr_scheduler:
             logger.info(f"learning rate: {lr_scheduler.get_lr()}")
         train_score = train_cls(train_loader,
-                            model,
-                            criterion,
-                            optimizer,
-                            epoch,
-                            logger)
+                                model,
+                                criterion,
+                                optimizer,
+                                epoch,
+                                logger)
 
         train_res.append(train_score)
         if lr_scheduler:
@@ -585,5 +588,6 @@ def train_loop_cls(epochs, train_loader, val_loader, model, criterion, optimizer
 
         if configs['save_checkpoints'] and configs['check_start'] < epoch < configs['check_end']:
             torch.save(model.state_dict(), f"{model_path}/{stamp}{configs['suffix']}_{run}_{epoch}.pth")
+        torch.cuda.empty_cache()
 
     return np.asarray(train_res), np.asarray(val_res)

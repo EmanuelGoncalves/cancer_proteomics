@@ -18,5 +18,5 @@
   "sign": 1,
   "target": "Tissue_type",
   "suffix": "_tissue_type",
-  "cut_off": 20
+  "cut_off": 30
 }

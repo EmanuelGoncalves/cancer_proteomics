@@ -3,14 +3,12 @@
   "data_file": "/home/scai/SangerDrug/data/genomic/WES_variants_processed.csv",
   "cell_lines_train": "/home/scai/SangerDrug/data/protein/E0022_P06_Protein_Matrix_ProNorM_no_control_train.txt",
   "cell_lines_test": "/home/scai/SangerDrug/data/protein/E0022_P06_Protein_Matrix_ProNorM_no_control_test.txt",
-  "ic50_file": "/home/scai/SangerDrug/data/drug/drug_final_processed.csv",
+  "ic50_file": "/home/scai/SangerDrug/data/drug/drug_final_processed_eg_id.csv",
   "model": "rf",
   "cv": 5,
   "params_grid": {
     "criterion": ["mse"],
     "n_estimators": [400, 600, 800, 1000],
-    "min_samples_split": [2, 5],
-    "min_samples_leaf": [1, 2],
     "max_features": ["sqrt"],
     "n_jobs": [1]
   },
@@ -25,5 +23,5 @@
   "metric": "corr",
   "sign": 1,
   "target": "ln_IC50",
-  "suffix": "_ruv_min_300"
+  "suffix": "_ruv_min_300_eg_id"
 }

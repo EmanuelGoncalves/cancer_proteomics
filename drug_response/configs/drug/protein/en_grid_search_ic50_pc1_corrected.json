@@ -3,13 +3,13 @@
   "data_file": "/home/scai/SangerDrug/data/protein/E0022_P06_Protein_Matrix_ProNorM_no_control_update.txt",
   "cell_lines_train": "/home/scai/SangerDrug/data/protein/E0022_P06_Protein_Matrix_ProNorM_no_control_train.txt",
   "cell_lines_test": "/home/scai/SangerDrug/data/protein/E0022_P06_Protein_Matrix_ProNorM_no_control_test.txt",
-  "ic50_file": "/home/scai/SangerDrug/data/drug/drug_final_processed_pc1_corrected.csv",
+  "ic50_file": "/home/scai/SangerDrug/data/drug/drug_final_processed_eg_id_pc1_corrected.csv",
   "model": "en",
   "cv": 5,
   "params_grid": {
     "alpha": [0.1, 0.5, 1],
     "l1_ratio": [0.2, 0.4, 0.5, 0.6, 0.8],
-    "max_iter": [10000, 20000]
+    "max_iter": [10000]
   },
   "imputer": "min",
   "min_val": -2.242616,
@@ -22,5 +22,5 @@
   "metric": "corr",
   "sign": 1,
   "target": "ln_IC50",
-  "suffix": "_ruv_min_300_pc1_corrected"
+  "suffix": "_ruv_min_300_pc1_corrected_eg_id"
 }

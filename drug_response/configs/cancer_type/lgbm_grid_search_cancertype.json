@@ -18,5 +18,5 @@
   "sign": 1,
   "target": "Cancer_type",
   "suffix": "_cancer_type",
-  "cut_off": 20
+  "cut_off": 30
 }

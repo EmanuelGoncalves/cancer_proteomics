@@ -1,22 +1,25 @@
 {
   "meta_file": "/home/scai/SangerDrug/data/E0022_P06_final_sample_map_no_control.txt",
   "data_file": "/home/scai/SangerDrug/data/tissue_ic50_cell_line.csv",
-  "ic50_file": "/home/scai/SangerDrug/data/drug/ic50_processed.csv",
+  "cell_lines_train": "/home/scai/SangerDrug/data/protein/E0022_P06_Protein_Matrix_ProNorM_no_control_train.txt",
+  "cell_lines_test": "/home/scai/SangerDrug/data/protein/E0022_P06_Protein_Matrix_ProNorM_no_control_test.txt",
+  "ic50_file": "/home/scai/SangerDrug/data/drug/drug_final_processed_eg_id.csv",
   "model": "rf",
   "cv": 5,
   "params_grid": {
     "n_estimators": [400, 600, 800, 1000],
     "n_jobs": [1]
   },
-  "imputer": "None",
+  "imputer": "min",
+  "min_val": -2.242616,
   "seed": 42,
   "work_dir": "/home/scai/SangerDrug/work_dirs/meta_info/tissue_ic50/RandomForest",
-  "min_cell_lines": 900,
+  "min_cell_lines": 300,
   "importance": false,
   "data_type": "tissue_type",
   "task": "regression",
   "metric": "corr",
   "sign": 1,
-  "target": "IC50_norm_scaled",
-  "suffix": "_900"
+  "target": "ln_IC50",
+  "suffix": "_tissue"
 }

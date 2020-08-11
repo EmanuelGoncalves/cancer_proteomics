@@ -87,7 +87,7 @@ def get_setup():
     lr_scheduler = None
     # lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
     #                                                     T_max=configs['num_of_epochs'])
-    # lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[80, 150, 200], gamma=0.1)
+    lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[300], gamma=0.2)
     return model, criterion, optimizer, lr_scheduler
 
 

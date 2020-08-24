@@ -29,8 +29,8 @@ from scipy.stats import spearmanr
 from crispy.Enrichment import Enrichment
 from GIPlot import GIPlot
 from crispy.MOFA import MOFA
+from crispy.DimensionReduction import Dim
 from crispy.CrispyPlot import CrispyPlot
-from scripts import DimReduction, two_vars_correlation
 from crispy.DataImporter import Proteomics, GeneExpression, CopyNumber, Mobem
 
 

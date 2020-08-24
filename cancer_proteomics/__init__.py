@@ -9,6 +9,7 @@ from crispy.CrispyPlot import CrispyPlot
 __version__ = "0.0.1"
 
 # - SET STYLE
+
 sns.set(
     style="ticks",
     context="paper",

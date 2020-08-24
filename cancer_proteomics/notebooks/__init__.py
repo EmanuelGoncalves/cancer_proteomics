@@ -68,7 +68,7 @@ class DataImport:
         return manifest
 
     @classmethod
-    def read_protein_matrix(cls):
+    def read_protein_matrix(cls, map_protein=False):
         """
         Read protein level matrix.
 
@@ -94,11 +94,35 @@ class DataImport:
         ]
         protein = protein.drop(columns=exclude_controls)
 
+        # Map protein to gene symbols
+        if map_protein:
+            pmap = cls.map_gene_name().reindex(protein.index)["GeneSymbol"].dropna()
+
+            protein = protein[protein.index.isin(pmap.index)]
+            protein = protein.groupby(pmap.reindex(protein.index)).mean()
+
         return protein
 
     @classmethod
     def read_gene_matrix(cls):
         return pd.read_csv(f"{cls.DPATH}/rnaseq_voom.csv.gz", index_col=0)
+
+    @classmethod
+    def read_copy_number(cls):
+        return pd.read_csv(f"{cls.DPATH}/copynumber_total_new_map.csv.gz", index_col=0)
+
+    @classmethod
+    def map_gene_name(cls, index_col="Entry name"):
+        idmap = pd.read_csv(f"{cls.DPATH}/uniprot_human_idmap.tab.gz", sep="\t")
+
+        if index_col is not None:
+            idmap = idmap.dropna(subset=[index_col]).set_index(index_col)
+
+        idmap["GeneSymbol"] = idmap["Gene names  (primary )"].apply(
+            lambda v: v.split("; ")[0] if str(v).lower() != "nan" else v
+        )
+
+        return idmap
 
 
 class DimReduction:

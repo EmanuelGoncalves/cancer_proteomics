@@ -104,6 +104,16 @@ class DataImport:
         return protein
 
     @classmethod
+    def read_protein_matrix_broad(cls):
+        protein = pd.read_csv(f"{cls.DPATH}/broad_tmt.csv.gz", compression="gzip")
+        protein = (
+            protein.dropna(subset=["Gene_Symbol"])
+                .groupby("Gene_Symbol")
+                .agg(np.nanmean)
+        )
+        return protein
+
+    @classmethod
     def read_gene_matrix(cls):
         return pd.read_csv(f"{cls.DPATH}/rnaseq_voom.csv.gz", index_col=0)
 

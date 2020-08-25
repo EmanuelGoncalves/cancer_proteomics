@@ -108,15 +108,17 @@ class DataImport:
         protein = pd.read_csv(f"{cls.DPATH}/broad_tmt.csv.gz", compression="gzip")
         protein = (
             protein.dropna(subset=["Gene_Symbol"])
-                .groupby("Gene_Symbol")
-                .agg(np.nanmean)
+            .groupby("Gene_Symbol")
+            .agg(np.nanmean)
         )
         return protein
 
     @classmethod
     def read_peptide_raw_mean(cls):
         peptide_raw_mean = pd.read_csv(
-            f"{cls.DPATH}/E0022_P06_Protein_Matrix_Raw_Mean_Intensities.tsv.gz", sep="\t", index_col=0
+            f"{cls.DPATH}/E0022_P06_Protein_Matrix_Raw_Mean_Intensities.tsv.gz",
+            sep="\t",
+            index_col=0,
         ).iloc[:, 0]
         return peptide_raw_mean
 
@@ -150,7 +152,9 @@ class DataImport:
 
     @classmethod
     def read_crispr_matrix(cls):
-        merged = pd.read_csv(f"{cls.DPATH}/CRISPRcleanR_FC.txt.gz", index_col=0, sep="\t")
+        merged = pd.read_csv(
+            f"{cls.DPATH}/CRISPRcleanR_FC.txt.gz", index_col=0, sep="\t"
+        )
 
         sid = cls.read_crispr_sids()
         merged = merged.rename(columns=sid)
@@ -169,6 +173,48 @@ class DataImport:
         merged_institute = merged_institute.rename(index=sid)
 
         return merged_institute
+
+    @classmethod
+    def read_drug_response(
+        cls,
+        as_matrix=True,
+        drug_columns=["drug_id", "drug_name", "dataset"],
+        sample_columns=["model_id"],
+        dtype="ln_IC50",
+    ):
+        drugresponse = pd.read_csv(
+            f"{cls.DPATH}/DrugResponse_PANCANCER_GDSC1_GDSC2_20200602.csv.gz"
+        )
+
+        drugresponse = drugresponse[~drugresponse["cell_line_name"].isin(["LS-1034"])]
+
+        if as_matrix:
+            drugresponse = pd.pivot_table(
+                drugresponse,
+                index=drug_columns,
+                columns=sample_columns,
+                values=dtype,
+                fill_value=np.nan,
+            )
+
+        return drugresponse
+
+    @classmethod
+    def read_drug_max_concentration(
+        cls, drug_columns=["drug_id", "drug_name", "dataset"]
+    ):
+        drugresponse = cls.read_drug_response(as_matrix=False)
+
+        maxconcentration = drugresponse.groupby(drug_columns)[
+            "max_screening_conc"
+        ].first()
+
+        return maxconcentration
+
+    @classmethod
+    def read_methylation_matrix(cls):
+        methy_promoter = pd.read_csv(f"{cls.DPATH}/methy_beta_gene_promoter.csv.gz", index_col=0)
+        return methy_promoter
 
 
 class DimReduction:
@@ -291,4 +337,3 @@ class DimReduction:
             ).get_title().set_fontsize("5")
 
         return ax
-

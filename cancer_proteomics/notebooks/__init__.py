@@ -114,6 +114,13 @@ class DataImport:
         return protein
 
     @classmethod
+    def read_peptide_raw_mean(cls):
+        peptide_raw_mean = pd.read_csv(
+            f"{cls.DPATH}/E0022_P06_Protein_Matrix_Raw_Mean_Intensities.tsv.gz", sep="\t", index_col=0
+        ).iloc[:, 0]
+        return peptide_raw_mean
+
+    @classmethod
     def read_gene_matrix(cls):
         return pd.read_csv(f"{cls.DPATH}/rnaseq_voom.csv.gz", index_col=0)
 
@@ -133,6 +140,35 @@ class DataImport:
         )
 
         return idmap
+
+    @classmethod
+    def read_crispr_sids(cls):
+        sid = cls.read_samplesheet()
+        sid = sid.reset_index().dropna(subset=["BROAD_ID"])
+        sid = sid.groupby("BROAD_ID")["model_id"].first()
+        return sid
+
+    @classmethod
+    def read_crispr_matrix(cls):
+        merged = pd.read_csv(f"{cls.DPATH}/CRISPRcleanR_FC.txt.gz", index_col=0, sep="\t")
+
+        sid = cls.read_crispr_sids()
+        merged = merged.rename(columns=sid)
+
+        return merged
+
+    @classmethod
+    def read_crispr_institute(cls):
+        merged = cls.read_crispr_matrix()
+
+        merged_institute = pd.Series(
+            {c: "Broad" if c.startswith("ACH-") else "Sanger" for c in merged}
+        )
+
+        sid = cls.read_crispr_sids()
+        merged_institute = merged_institute.rename(index=sid)
+
+        return merged_institute
 
 
 class DimReduction:

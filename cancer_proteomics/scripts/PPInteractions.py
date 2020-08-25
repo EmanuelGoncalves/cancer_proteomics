@@ -79,10 +79,6 @@ if __name__ == "__main__":
     crispr = crispr_obj.filter(subset=list(prot))
     LOG.info(f"CRISPR: {crispr.shape}")
 
-    drespo_obj = DrugResponse()
-    drespo = drespo_obj.filter(subset=list(prot))
-    LOG.info(f"Drug: {drespo.shape}")
-
     # CORUM + BioGRID
     #
     corum_db = CORUM()

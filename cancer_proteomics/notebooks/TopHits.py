@@ -87,6 +87,7 @@ GIPlot.gi_manhattan(lm_crispr)
 plt.savefig(f"{RPATH}/TopHits_crispr_manhattan_plot.png", bbox_inches="tight")
 plt.close("all")
 
+
 # Selective and predictive dependencies
 #
 R2_THRES = 0.2

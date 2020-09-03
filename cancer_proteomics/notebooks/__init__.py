@@ -12,6 +12,111 @@ from scipy.stats import spearmanr, pearsonr
 from sklearn.decomposition import FactorAnalysis, PCA
 
 
+PALETTE_CTYPE = {
+    "B-Cell Non-Hodgkin's Lymphoma": "#007fff",
+    "Plasma Cell Myeloma": "#665d1e",
+    "Acute Myeloid Leukemia": "#ffbf00",
+    "Other Solid Carcinomas": "#fbceb1",
+    "Gastric Carcinoma": "#ff033e",
+    "T-Lymphoblastic Leukemia": "#ab274f",
+    "Breast Carcinoma": "#f2f3f4",
+    "Ewing's Sarcoma": "#7cb9e8",
+    "Ovarian Carcinoma": "#efdecd",
+    "Melanoma": "#8db600",
+    "Head and Neck Carcinoma": "#e9d66b",
+    "Endometrial Carcinoma": "#b284be",
+    "Glioblastoma": "#b2beb5",
+    "Small Cell Lung Carcinoma": "#f0f8ff",
+    "Pancreatic Carcinoma": "#6e7f80",
+    "Burkitt's Lymphoma": "#ff7e00",
+    "Mesothelioma": "#87a96b",
+    "B-Lymphoblastic Leukemia": "#c9ffe5",
+    "Prostate Carcinoma": "#9f2b68",
+    "Neuroblastoma": "#00ffff",
+    "Non-Small Cell Lung Carcinoma": "#008000",
+    "Chronic Myelogenous Leukemia": "#cd9575",
+    "Colorectal Carcinoma": "#72a0c1",
+    "Cervical Carcinoma": "#a32638",
+    "Kidney Carcinoma": "#9966cc",
+    "Oral Cavity Carcinoma": "#f19cbb",
+    "Hepatocellular Carcinoma": "#e32636",
+    "Non-Cancerous": "#3b7a57",
+    "Biliary Tract Carcinoma": "#faebd7",
+    "Glioma": "#fdee00",
+    "Squamous Cell Lung Carcinoma": "#00308f",
+    "Bladder Carcinoma": "#7fffd4",
+    "Esophageal Squamous Cell Carcinoma": "#c46210",
+    "Hodgkin's Lymphoma": "#a8bb19",
+    "Rhabdomyosarcoma": "#ff9966",
+    "Thyroid Gland Carcinoma": "#a52a2a",
+    "T-Cell Non-Hodgkin's Lymphoma": "#568203",
+    "Esophageal Carcinoma": "#4b5320",
+    "Other Blood Carcinomas": "#5d8aa8",
+    "Osteosarcoma": "#8f9779",
+    "Chondrosarcoma": "#915c83",
+}
+
+PALETTE_TTYPE = {
+    "Haematopoietic and Lymphoid": "#007fff",
+    "Lung": "#665d1e",
+    "Stomach": "#ffbf00",
+    "Breast": "#fbceb1",
+    "Bone": "#ff033e",
+    "Ovary": "#ab274f",
+    "Skin": "#f2f3f4",
+    "Head and Neck": "#7cb9e8",
+    "Endometrium": "#efdecd",
+    "Adrenal Gland": "#8db600",
+    "Central Nervous System": "#e9d66b",
+    "Pancreas": "#b284be",
+    "Prostate": "#b2beb5",
+    "Peripheral Nervous System": "#f0f8ff",
+    "Large Intestine": "#6e7f80",
+    "Cervix": "#ff7e00",
+    "Kidney": "#87a96b",
+    "Liver": "#c9ffe5",
+    "Soft Tissue": "#9f2b68",
+    "Biliary Tract": "#00ffff",
+    "Bladder": "#008000",
+    "Esophagus": "#cd9575",
+    "Testis": "#72a0c1",
+    "Thyroid": "#a32638",
+    "Vulva": "#9966cc",
+    "Uterus": "#f19cbb",
+    "Small Intestine": "#e32636",
+    "Placenta": "#3b7a57",
+}
+
+PALETTE_INSTRUMENT = {
+    "M01": "#66c2a5",
+    "M02": "#fc8d62",
+    "M03": "#8da0cb",
+    "M04": "#e78ac3",
+    "M05": "#a6d854",
+    "M06": "#ffd92f",
+}
+
+PALETTE_BATCH = {
+    "P01": "#7fc97f",
+    "P02": "#beaed4",
+    "P03": "#fdc086",
+    "P04": "#386cb0",
+    "P05": "#f0027f",
+    "P06": "#bf5b17",
+}
+
+PALETTE_PERTURB = {
+    "BT-549 10% FBS": "#1f77b4",
+    "BT-549 1% FBS": "#aec7e8",
+    "T-47D 10% FBS": "#ff7f0e",
+    "T-47D 1% FBS": "#ffbb78",
+    "HCC1395 10% FBS": "#2ca02c",
+    "HCC1395 1% FBS": "#98df8a",
+    "HCC1143 10% FBS": "#d62728",
+    "HCC1143 1% FBS": "#ff9896",
+}
+
+
 def two_vars_correlation(var1, var2, idx_set=None, method="pearson", verbose=0):
     if verbose > 0:
         print(f"Var1={var1.name}; Var2={var2.name}")
@@ -68,7 +173,7 @@ class DataImport:
         return manifest
 
     @classmethod
-    def read_protein_matrix(cls, map_protein=False):
+    def read_protein_matrix(cls, map_protein=False, subset=None):
         """
         Read protein level matrix.
 
@@ -101,16 +206,62 @@ class DataImport:
             protein = protein[protein.index.isin(pmap.index)]
             protein = protein.groupby(pmap.reindex(protein.index)).mean()
 
+        if subset is not None:
+            protein = protein.loc[:, protein.columns.isin(subset)]
+
         return protein
 
     @classmethod
-    def read_protein_matrix_broad(cls):
+    def read_protein_perturbation_manifest(cls):
+        manifest = pd.read_csv(
+            f"{cls.DPATH}/E0019_BreastCan_ProteinMatrix_LoessNorm_byDiffacto.csv",
+            index_col=0,
+        ).T.iloc[:12].T
+
+        manifest = manifest.replace({"Cell Line": {
+            "T-47D 10%FBS": "T-47D 10% FBS",
+            "T-47D 1%FBS": "T-47D 1% FBS",
+        }})
+
+        return manifest
+
+    @classmethod
+    def read_protein_perturbation(cls, map_protein=False, subset=None):
+        """
+        Read protein level matrix.
+
+        :return:
+        """
+        # Read protein level normalised intensities
+        protein = pd.read_csv(
+            f"{cls.DPATH}/E0019_BreastCan_ProteinMatrix_LoessNorm_byDiffacto.csv",
+            index_col=0,
+        ).T.iloc[12:].astype(float)
+
+        # Map protein to gene symbols
+        if map_protein:
+            pmap = cls.map_gene_name().reindex(protein.index)["GeneSymbol"].dropna()
+
+            protein = protein[protein.index.isin(pmap.index)]
+            protein = protein.groupby(pmap.reindex(protein.index)).mean()
+
+        if subset is not None:
+            protein = protein.loc[:, protein.columns.isin(subset)]
+
+        return protein
+
+    @classmethod
+    def read_protein_matrix_broad(cls, subset=None):
         protein = pd.read_csv(f"{cls.DPATH}/broad_tmt.csv.gz", compression="gzip")
         protein = (
             protein.dropna(subset=["Gene_Symbol"])
             .groupby("Gene_Symbol")
             .agg(np.nanmean)
         )
+
+        if subset is not None:
+            protein = protein.loc[:, protein.columns.isin(subset)]
+
         return protein
 
     @classmethod
@@ -123,8 +274,13 @@ class DataImport:
         return peptide_raw_mean
 
     @classmethod
-    def read_gene_matrix(cls):
-        return pd.read_csv(f"{cls.DPATH}/rnaseq_voom.csv.gz", index_col=0)
+    def read_gene_matrix(cls, subset=None):
+        data = pd.read_csv(f"{cls.DPATH}/rnaseq_voom.csv.gz", index_col=0)
+
+        if subset is not None:
+            data = data.loc[:, data.columns.isin(subset)]
+
+        return data
 
     @classmethod
     def read_copy_number(cls):
@@ -151,13 +307,16 @@ class DataImport:
         return sid
 
     @classmethod
-    def read_crispr_matrix(cls):
+    def read_crispr_matrix(cls, subset=None):
         merged = pd.read_csv(
             f"{cls.DPATH}/CRISPRcleanR_FC.txt.gz", index_col=0, sep="\t"
         )
 
         sid = cls.read_crispr_sids()
         merged = merged.rename(columns=sid)
+
+        if subset is not None:
+            merged = merged.loc[:, merged.columns.isin(subset)]
 
         return merged
 
@@ -181,6 +340,7 @@ class DataImport:
         drug_columns=["drug_id", "drug_name", "dataset"],
         sample_columns=["model_id"],
         dtype="ln_IC50",
+        subset=None,
     ):
         drugresponse = pd.read_csv(
             f"{cls.DPATH}/DrugResponse_PANCANCER_GDSC1_GDSC2_20200602.csv.gz"
@@ -197,6 +357,9 @@ class DataImport:
                 fill_value=np.nan,
             )
 
+        if subset is not None:
+            drugresponse = drugresponse.loc[:, drugresponse.columns.isin(subset)]
+
         return drugresponse
 
     @classmethod
@@ -212,8 +375,14 @@ class DataImport:
         return maxconcentration
 
     @classmethod
-    def read_methylation_matrix(cls):
-        methy_promoter = pd.read_csv(f"{cls.DPATH}/methy_beta_gene_promoter.csv.gz", index_col=0)
+    def read_methylation_matrix(cls, subset=None):
+        methy_promoter = pd.read_csv(
+            f"{cls.DPATH}/methy_beta_gene_promoter.csv.gz", index_col=0
+        )
+
+        if subset is not None:
+            methy_promoter = methy_promoter.loc[:, methy_promoter.columns.isin(subset)]
+
         return methy_promoter
 
 

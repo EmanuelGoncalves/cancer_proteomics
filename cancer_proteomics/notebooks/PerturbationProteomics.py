@@ -56,7 +56,7 @@ RPATH = pkg_resources.resource_filename("cancer_proteomics", "plots/")
 
 # ### Import MOFA analysis
 
-factors, weights, rsquare = MOFA.read_mofa_hdf5(f"{TPATH}/MultiOmics.hdf5")
+factors, weights, rsquare = MOFA.read_mofa_hdf5(f"{TPATH}/MultiOmics_broad.hdf5")
 
 # ### Import manifest
 

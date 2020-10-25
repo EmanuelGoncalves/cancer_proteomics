@@ -76,6 +76,7 @@ covariates = pd.concat(
         ss[["ploidy", "mutational_burden", "growth", "size"]],
         ss["replicates_correlation"].rename("RepsCorrelation"),
         prot.mean().rename("MeanProteomics"),
+        prot_broad.mean().rename("MeanProteomicsBroad"),
         methy.mean().rename("MeanMethylation"),
         drespo.mean().rename("MeanDrugResponse"),
     ],
@@ -90,18 +91,16 @@ groupby = ss.loc[prot.columns, "tissue"].apply(
 )
 
 mofa = MOFA(
-    views=dict(proteomics=prot, transcriptomics=gexp, methylation=methy, drespo=drespo),
+    views=dict(proteomics=prot, proteomics_broad=prot_broad, transcriptomics=gexp, methylation=methy, drespo=drespo),
     covariates=dict(
         proteomics=covariates[["MeanProteomics"]].dropna(),
-        methylation=covariates[["MeanMethylation"]].dropna(),
-        drespo=covariates[["MeanDrugResponse"]].dropna(),
     ),
     groupby=groupby,
     iterations=2000,
     use_overlap=False,
-    convergence_mode="slow",
+    convergence_mode="fast",
     factors_n=15,
-    from_file=f"{TPATH}/MultiOmics_covs.hdf5",
+    from_file=f"{TPATH}/MultiOmics.hdf5",
     verbose=2,
 )
 
@@ -186,3 +185,6 @@ for z in ["VIM_proteomics", "CDH1_proteomics"]:
         dpi=600,
     )
     plt.close("all")
+
+# Export matrix
+plot_df = pd.concat([mofa.rsquare[k].T.add_prefix(f"{k}_").T for k in mofa.rsquare] + [n_factors_corr.T.add_prefix(f"Corr_").T])

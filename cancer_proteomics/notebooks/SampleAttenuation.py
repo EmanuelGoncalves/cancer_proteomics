@@ -18,6 +18,7 @@
 # %load_ext autoreload
 # %autoreload 2
 
+import igraph
 import logging
 import numpy as np
 import pandas as pd
@@ -55,7 +56,7 @@ translation_sig = translation_sig["GO_TRANSLATIONAL_INITIATION"]
 
 # MOFA analysis
 
-factors, weights, rsquare = MOFA.read_mofa_hdf5(f"{TPATH}/MultiOmics_covs.hdf5")
+factors, weights, rsquare = MOFA.read_mofa_hdf5(f"{TPATH}/MultiOmics_broad.hdf5")
 
 # Perturbation proteomics differential analysis
 perturb = pd.read_csv(f"{DPATH}/perturbation_proteomics_diff_analysis.csv")
@@ -211,7 +212,7 @@ g = sns.heatmap(
     annot_kws={"fontsize": 5},
 )
 ax.set_xlabel("")
-ax.set_ylabel(f"Potential related factors")
+ax.set_ylabel(f"")
 
 g.set_xticklabels(g.get_xticklabels(), rotation=0, va="center")
 
@@ -219,6 +220,60 @@ plt.subplots_adjust(hspace=0.025)
 
 plt.savefig(f"{RPATH}/SampleAttenuation_clustermap.pdf", bbox_inches="tight")
 plt.savefig(f"{RPATH}/SampleAttenuation_clustermap.png", bbox_inches="tight", dpi=600)
+plt.close("all")
+
+
+###
+plot_df = pd.concat([
+    rsquare["Haem"].T.add_prefix("Haem_"),
+    rsquare["Other"].T.add_prefix("Other_"),
+    n_factors_corr.T.add_prefix("Corr_"),
+    perturb_corr.T.add_prefix("Pert_"),
+], axis=1).T
+
+
+f, axs = plt.subplots(
+    3,
+    1,
+    sharex="col",
+    sharey="none",
+    gridspec_kw={"height_ratios": [1.5] * 2 + [9]},
+    figsize=(plot_df.shape[1] * 0.25, plot_df.shape[0] * 0.25),
+)
+
+for i, n in enumerate(["Haem", "Other"]):
+    df = plot_df[[i.startswith(n) for i in plot_df.index]]
+    df.index = [i.split("_")[1] for i in df.index]
+    g = sns.heatmap(
+        df,
+        cmap="Blues",
+        annot=True,
+        cbar=False,
+        fmt=".1f",
+        linewidths=0.5,
+        ax=axs[i],
+        vmin=0,
+        annot_kws={"fontsize": 5},
+    )
+    axs[i].set_ylabel(f"{n} cell lines")
+#
+df = plot_df[[i.split("_")[0] not in ["Haem", "Other"] for i in plot_df.index]]
+sns.heatmap(
+    df,
+    cmap="RdYlGn",
+    center=0,
+    annot=True,
+    cbar=False,
+    fmt=".2f",
+    linewidths=0.5,
+    annot_kws={"fontsize": 5},
+    ax=axs[2],
+)
+
+plt.subplots_adjust(hspace=0.025)
+
+plt.savefig(f"{RPATH}/SampleAttenuation_clustermap_merged.pdf", bbox_inches="tight")
+plt.savefig(f"{RPATH}/SampleAttenuation_clustermap_merged.png", bbox_inches="tight", dpi=600)
 plt.close("all")
 
 

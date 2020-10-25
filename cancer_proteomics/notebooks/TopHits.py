@@ -35,6 +35,7 @@ from sklearn.metrics.ranking import auc
 from crispy.Enrichment import Enrichment
 from crispy.CrispyPlot import CrispyPlot
 from sklearn.mixture import GaussianMixture
+from sklearn.preprocessing import StandardScaler
 from statsmodels.stats.multitest import multipletests
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from cancer_proteomics.notebooks import DataImport, two_vars_correlation
@@ -65,10 +66,8 @@ crispr = DataImport.read_crispr_matrix()
 
 # Read Drug-response
 drespo = DataImport.read_drug_response()
-drespo = drespo.set_index(pd.Series([";".join(map(str, i)) for i in drespo.index]))
 
 dmaxc = DataImport.read_drug_max_concentration()
-dmaxc.index = [";".join(map(str, i)) for i in dmaxc.index]
 dmaxc = dmaxc.reindex(drespo.index)
 
 # LM associations
@@ -77,22 +76,11 @@ lm_drug = pd.read_csv(f"{TPATH}/lm_sklearn_degr_drug_annotated.csv.gz")
 lm_crispr = pd.read_csv(f"{TPATH}/lm_sklearn_degr_crispr_annotated.csv.gz")
 
 
-#
-#
-GIPlot.gi_manhattan(lm_drug)
-plt.savefig(f"{RPATH}/TopHits_drug_manhattan_plot.png", bbox_inches="tight")
-plt.close("all")
-
-GIPlot.gi_manhattan(lm_crispr)
-plt.savefig(f"{RPATH}/TopHits_crispr_manhattan_plot.png", bbox_inches="tight")
-plt.close("all")
-
-
 # Selective and predictive dependencies
 #
-R2_THRES = 0.2
-SKEW_THRES = -2
-FDR_THRES = 0.01
+R2_THRES = 0.4
+SKEW_THRES = -1
+FDR_THRES = 0.1
 
 dep_df = pd.concat(
     [
@@ -106,6 +94,10 @@ dep_df = pd.concat(
         .assign(dtype="crispr"),
     ]
 ).dropna()
+
+x = dep_df.query("dtype == 'drug'")[["r2"]]
+
+pd.Series(StandardScaler().fit_transform(x)[:, 0]).hist(); plt.show()
 
 # Selectivity plot
 #
@@ -191,7 +183,7 @@ tophits_feat["score"] = [
 # Top dependencies
 #
 
-topdep = ["WRN", "STAG1", "1403;AZD6094;GDSC1"]
+topdep = ["FOXA1"]
 
 # Top associations
 for y_id in topdep:
@@ -254,7 +246,7 @@ for y_id in topdep:
     ax.axes.get_xaxis().set_ticks([])
 
     plt.savefig(f"{RPATH}/TopHits_top_associations_{y_id}.pdf", bbox_inches="tight")
-    plt.savefig(f"{RPATH}/TopHits_top_associations_{y_id}.png", bbox_inches="tight")
+    plt.savefig(f"{RPATH}/TopHits_top_associations_{y_id}.png", bbox_inches="tight", dpi=600)
     plt.close("all")
 
 #
@@ -272,10 +264,12 @@ gi_pairs = [
     ("BSG", "FOXA1", "crispr", ["Breast"]),
     ("PRKAR1A", "PRKAR1A", "crispr", None),
     ("HNRNPH1", "HNRNPH1", "crispr", None),
+    ("TP53", "MDM2", "crispr", None),
+    ("REXO4", "TP53", "crispr", None),
 ]
 
 for p, c, dtype, ctissues in gi_pairs:
-    # p, c, dtype, ctissues = ("UBFD1", "TP63", "crispr", ["Lung"])
+    # p, c, dtype, ctissues = ("BSG", "FOXA1", "crispr", ["Breast"])
 
     plot_df = pd.concat(
         [
@@ -355,49 +349,57 @@ for p, c, dtype, ctissues in gi_pairs:
     )
     plt.close("all")
 
-    #
-    breast_subtypes = pd.read_csv(f"{DPATH}/breast_subtypes.txt", sep="\t", index_col=0)
+#
+breast_subtypes = pd.read_csv(f"{DPATH}/breast_subtypes.txt", sep="\t", index_col=0)
 
-    corder = ["FOXA1", "BSG"]
+corder = ["FOXA1", "BSG"]
 
-    plot_df = pd.concat(
-        [crispr.loc["FOXA1"], prot.loc["BSG"], breast_subtypes], axis=1
-    ).dropna(subset=["pam50"])
+plot_df = pd.concat(
+    [crispr.loc["FOXA1"], prot.loc["BSG"], breast_subtypes["pam50"]], axis=1
+).dropna(subset=corder)
 
-    plot_df = pd.melt(plot_df, value_vars=["FOXA1", "BSG"], id_vars=["pam50"]).dropna()
+plot_df = pd.melt(plot_df, value_vars=["FOXA1", "BSG"], id_vars=["pam50"]).dropna()
 
-    g = sns.catplot(
+g = sns.catplot(
+    "pam50",
+    "value",
+    data=plot_df,
+    col="variable",
+    facet_kws=dict(despine=False),
+    sharex="row",
+    sharey="col",
+    height=2.5,
+    kind="swarm",
+    col_order=corder,
+)
+
+g.set_axis_labels("Breast cancer PAM50 subtypes", "")
+
+titles = ["FOXA1\nCRISPR-Cas9 (log2 FC)", "BSG\nProtein intensities"]
+for i, ax in enumerate(g.axes[0]):
+    ax.set_title(titles[i])
+    sns.boxplot(
         "pam50",
         "value",
-        data=plot_df,
-        col="variable",
-        facet_kws=dict(despine=False),
-        sharex="row",
-        sharey="col",
-        height=2.5,
-        kind="swarm",
-        col_order=corder,
+        data=plot_df.query(f"variable == '{corder[i]}'"),
+        sym="",
+        boxprops=dict(facecolor=(0, 0, 0, 0)),
+        zorder=2,
+        ax=ax,
     )
+    ax.grid(True, ls="-", lw=0.1, alpha=1.0, zorder=0, axis="both")
+    ax.set_ylabel("")
 
-    g.set_axis_labels("Breast cancer PAM50 subtypes", "")
+plt.savefig(f"{RPATH}/TopHits_FOXA1_BSG_Breast_Subtypes.pdf", bbox_inches="tight")
+plt.savefig(
+    f"{RPATH}/TopHits_FOXA1_BSG_Breast_Subtypes.png", bbox_inches="tight", dpi=600
+)
+plt.close("all")
 
-    titles = ["FOXA1\nCRISPR-Cas9 (log2 FC)", "BSG\nProtein intensities"]
-    for i, ax in enumerate(g.axes[0]):
-        ax.set_title(titles[i])
-        sns.boxplot(
-            "pam50",
-            "value",
-            data=plot_df.query(f"variable == '{corder[i]}'"),
-            sym="",
-            boxprops=dict(facecolor=(0, 0, 0, 0)),
-            zorder=2,
-            ax=ax,
-        )
-        ax.grid(True, ls="-", lw=0.1, alpha=1.0, zorder=0, axis="both")
-        ax.set_ylabel("")
+#
 
-    plt.savefig(f"{RPATH}/TopHits_FOXA1_BSG_Breast_Subtypes.pdf", bbox_inches="tight")
-    plt.savefig(
-        f"{RPATH}/TopHits_FOXA1_BSG_Breast_Subtypes.png", bbox_inches="tight", dpi=600
-    )
-    plt.close("all")
+x = pd.concat([
+    drespo.loc[["1909;Venetoclax;GDSC2", "1373;Dabrafenib;GDSC1", "1427;AZD5582;GDSC1"]].T,
+    prot.loc[["TSNAX", "DBNL", "NOC2L"]].T,
+    ss["tissue"]
+], axis=1)

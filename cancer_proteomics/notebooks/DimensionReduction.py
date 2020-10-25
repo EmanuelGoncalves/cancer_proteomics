@@ -25,6 +25,7 @@ import pandas as pd
 import pkg_resources
 import seaborn as sns
 import matplotlib.pyplot as plt
+from crispy import Utils
 from crispy.GIPlot import GIPlot
 from crispy.Enrichment import Enrichment
 from crispy.CrispyPlot import CrispyPlot
@@ -52,6 +53,40 @@ prot_broad = DataImport.read_protein_matrix_broad()
 
 # Read Transcriptomics
 gexp = DataImport.read_gene_matrix()
+
+
+# Overlaps
+#
+samples = list(set.intersection(set(prot), set(gexp)))
+genes = list(
+    set.intersection(
+        set(prot.index), set(gexp.index), set(prot_broad.index)
+    )
+)
+LOG.info(f"Genes: {len(genes)}; Samples: {len(samples)}")
+
+
+# Data tranformations
+#
+gexp_t = pd.DataFrame(
+    {i: Utils.gkn(gexp.loc[i].dropna()).to_dict() for i in genes}
+).T
+
+
+# Sample-wise Protein/Gene correlation with CopyNumber - Attenuation
+#
+satt_corr = pd.DataFrame(
+    {
+        s: pd.concat(
+            [
+                pd.Series(two_vars_correlation(gexp_t[s], prot[s])).add_prefix("gexp_prot_"),
+                pd.Series(two_vars_correlation(gexp_t[s], prot_broad[s])).add_prefix(
+                    "gexp_prot_broad_") if s in prot_broad else pd.Series(),
+            ]
+        )
+        for s in samples
+    }
+).T
 
 
 # ### Dimension reduction

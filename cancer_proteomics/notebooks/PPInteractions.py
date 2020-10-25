@@ -18,6 +18,7 @@
 # %load_ext autoreload
 # %autoreload 2
 
+import igraph
 import logging
 import numpy as np
 import pandas as pd
@@ -126,13 +127,15 @@ def df_correlation(df_matrix, min_obs=15):
 
     return df
 
+samples_overlap = list(set.intersection(set(prot), set(gexp), set(crispr)))
+LOG.info(f"Overlapping Samples = {len(samples_overlap)}")
 
 df_corr = (
     pd.concat(
         [
-            df_correlation(prot.reindex(genes).T).add_prefix("prot_"),
-            df_correlation(gexp.reindex(genes).T).add_prefix("gexp_"),
-            df_correlation(crispr.reindex(genes).T).add_prefix("crispr_"),
+            df_correlation(prot.reindex(index=genes, columns=samples_overlap).T).add_prefix("prot_"),
+            df_correlation(gexp.reindex(index=genes, columns=samples_overlap).T).add_prefix("gexp_"),
+            df_correlation(crispr.reindex(index=genes, columns=samples_overlap).T).add_prefix("crispr_"),
         ],
         axis=1,
     )
@@ -159,14 +162,14 @@ df_corr["huri"] = [
 ]
 
 # String distance
-ppi = PPI().build_string_ppi(score_thres=900)
+ppi = PPI(ddir=PPIPATH).build_string_ppi(score_thres=900)
 df_corr = PPI.ppi_annotation(
     df_corr, ppi, x_var="protein1", y_var="protein2", ppi_var="string_dist"
 )
 df_corr = df_corr.assign(string=(df_corr["string_dist"] == "1").astype(int))
 
 # Number of observations
-p_obs = {p: set(v.dropna().index) for p, v in prot.reindex(genes).iterrows()}
+p_obs = {p: set(v.dropna().index) for p, v in prot.reindex(genes, columns=samples_overlap).iterrows()}
 df_corr["nobs"] = [
     len(set.intersection(p_obs[p1], p_obs[p2]))
     for p1, p2 in df_corr[["protein1", "protein2"]].values
@@ -179,15 +182,64 @@ df_corr["protein1_cgene_type"] = cgenes.reindex(df_corr["protein1"]).values
 df_corr["protein2_cgene"] = df_corr["protein2"].isin(set(cgenes.index)).astype(int)
 df_corr["protein2_cgene_type"] = cgenes.reindex(df_corr["protein2"]).values
 
-# Export
-df_corr.to_csv(f"{TPATH}/PPInteractions.csv.gz", compression="gzip", index=False)
-
-
-# ### Define novel PPIs
-
+# Merged score
 df_corr["merged_pvalue"] = df_corr[
     ["prot_pvalue", "gexp_pvalue", "crispr_pvalue"]
 ].prod(1)
+
+# Export
+df_corr.to_csv(f"{TPATH}/PPInteractions_overlap.csv.gz", compression="gzip", index=False)
+# df_corr = pd.read_csv(f"{TPATH}/PPInteractions_overlap.csv.gz")
+
+#
+#
+pal = sns.color_palette("tab10").as_hex()
+
+_, ax = plt.subplots(1, 1, figsize=(2, 1.5), dpi=600)
+
+for i, n in enumerate(["prot", "gexp", "crispr"]):
+    sns.ecdfplot(df_corr.query("nobs > 300")[f"{n}_corr"], color=pal[i], label=f"{n}", ax=ax)
+    f"{n}={sum(df_corr[f'{n}_corr'].abs() > .5)}"
+
+ax.set_xlabel("Protein-protein correlations\n(Pearson's r)")
+ax.set_ylabel("Proportion")
+ax.grid(True, axis="both", ls="-", lw=0.1, alpha=1.0, zorder=0)
+
+ax.legend(frameon=False, prop={"size": 6})
+
+plt.savefig(
+    f"{RPATH}/PPInteractions_ecdf_correlations.pdf", bbox_inches="tight"
+)
+plt.savefig(
+    f"{RPATH}/PPInteractions_ecdf_correlations.png", bbox_inches="tight"
+)
+plt.close("all")
+
+##
+igraph_nets = {}
+for n in ["prot", "gexp", "crispr"]:
+    # Network
+    net = df_corr.query(f"{n}_corr > .5")
+    net_i = igraph.Graph(directed=False)
+
+    # Initialise network lists
+    edges = [(px, py) for px, py in net[["protein1", "protein2"]].values]
+    vertices = list(set(net["protein1"]).union(net["protein2"]))
+
+    # Add nodes
+    net_i.add_vertices(vertices)
+
+    # Add edges
+    net_i.add_edges(edges)
+
+    # Simplify
+    net_i = net_i.simplify(combine_edges="max")
+    LOG.info(net_i.summary())
+    LOG.info(net_i.transitivity_undirected())
+
+    igraph_nets[n] = net_i
+
+# ### Define novel PPIs
 novel_ppis = df_corr.query(f"(prot_fdr < .05) & (prot_corr > 0.5)")
 
 # Export
@@ -237,10 +289,10 @@ ax.set_xlabel("Ranked correlation")
 ax.grid(True, axis="both", ls="-", lw=0.1, alpha=1.0, zorder=0)
 
 plt.savefig(
-    f"{RPATH}/PPInteractions_roc_curves.pdf", bbox_inches="tight"
+    f"{RPATH}/PPInteractions_roc_curves_overlap.pdf", bbox_inches="tight"
 )
 plt.savefig(
-    f"{RPATH}/PPInteractions_roc_curves.png", bbox_inches="tight"
+    f"{RPATH}/PPInteractions_roc_curves_overlap.png", bbox_inches="tight"
 )
 plt.close("all")
 
@@ -282,10 +334,10 @@ ax.legend(
 ).get_title().set_fontsize("5")
 
 plt.savefig(
-    f"{RPATH}/PPInteractions_roc_barplot.pdf", bbox_inches="tight"
+    f"{RPATH}/PPInteractions_roc_barplot_overlap.pdf", bbox_inches="tight"
 )
 plt.savefig(
-    f"{RPATH}/PPInteractions_roc_barplot.png", bbox_inches="tight"
+    f"{RPATH}/PPInteractions_roc_barplot_overlap.png", bbox_inches="tight"
 )
 plt.close("all")
 

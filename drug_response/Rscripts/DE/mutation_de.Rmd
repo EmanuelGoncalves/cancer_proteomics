@@ -1,0 +1,153 @@
+```{r setup}
+library(ggplot2)
+library(DEP)
+library(limma)
+library(edgeR)
+library("dplyr")
+library(EnhancedVolcano)
+```
+
+```{r}
+wes = read.table("../../data/genomic/WES_variants_processed.csv.gz", stringsAsFactors = F, sep = ",", header = T, check.names = F)
+protein = read.table("../../data/protein/protein_de_processed.csv", stringsAsFactors = F, sep = ",", header = T, row.names = 1, check.names = F)
+protein = protein[, colnames(protein) %in% wes$Cell_line]
+
+rna = read.table("../../data/rna/rna_processed.csv", sep=",", header = T, stringsAsFactors = F, row.names = 1, check.names = F)
+rna = rna[, colnames(rna) %in% wes$Cell_line]
+```
+
+```{r }
+gene = "TP53"
+cell_lines_wt = wes[wes[gene]==0, "Cell_line"]
+cell_lines_mut = wes[wes[gene]>0,"Cell_line"]
+
+protein_wt = protein[,colnames(protein) %in% cell_lines_wt]
+protein_mut = protein[,colnames(protein) %in% cell_lines_mut]
+
+```
+
+
+```{r fig.height=7,fig.width=9}
+mutant = as.numeric(colnames(rna) %in% cell_lines_mut)
+design <- model.matrix(~1 + mutant)
+
+fit <- lmFit(rna, design)
+fit <- eBayes(fit)
+rna_res = topTable(fit, coef=ncol(design), number = nrow(rna))
+
+```
+
+```{r}
+pdf("../../plots/landscape/TP53_RNA_DE.pdf", width = 9, height = 7)
+EnhancedVolcano(rna_res,
+    lab = rownames(rna_res),
+    title = paste0("WT vs MUT (RNA) - ", gene),
+    subtitle = '',
+    # titleLabSize = 14,
+    # subtitleLabSize = 10,
+    # captionLabSize = 10,
+    # axisLabSize = 12,
+    legendVisible = F,
+    x = 'logFC',
+    y = 'adj.P.Val',
+    xlim = c(min(rna_res[['logFC']], na.rm=TRUE),max(rna_res[['logFC']]+0.5, na.rm=TRUE)),
+    ylim = c(0, max(-log10(rna_res[['adj.P.Val']]), na.rm=TRUE) + 1),
+    pCutoff=1e-20,
+    FCcutoff=1)
+dev.off()
+```
+```{r}
+write.table(rna_res, paste0("../../result_files/de/rna/", gene,"_rna.csv"), sep = ",", quote = F)
+```
+
+
+```{r fig.height=7, fig.width=9}
+mutant = as.numeric(colnames(protein) %in% cell_lines_mut)
+design <- model.matrix(~1 + mutant)
+
+fit <- lmFit(protein, design)
+fit <- eBayes(fit)
+protein_res = topTable(fit, coef=ncol(design), number = nrow(protein))
+```
+```{r}
+pdf("../../plots/landscape/TP53_Protein_DE.pdf", width = 9, height = 7)
+
+EnhancedVolcano(protein_res,
+    lab = rownames(protein_res),
+    title = paste0("WT vs MUT (Protein) - ", gene),
+    subtitle = '',
+    # titleLabSize = 14,
+    # subtitleLabSize = 10,
+    # captionLabSize = 10,
+    # axisLabSize = 12,
+    legendVisible = F,
+    x = 'logFC',
+    y = 'adj.P.Val',
+    FCcutoff=1,
+    pCutoff=1e-3)
+dev.off()
+```
+
+
+```{r}
+mutant = as.numeric(colnames(protein_impute_mean) %in% cell_lines_mut)
+design <- model.matrix(~1 + mutant)
+
+fit <- lmFit(protein_impute_mean, design)
+fit <- eBayes(fit)
+protein_res = topTable(fit, coef=ncol(design), number = nrow(protein_impute_mean))
+volcanoplot(fit,coef=2,highlight=10,names=rownames(protein), main=paste0("WT vs MUT (Protein) - ", gene))
+EnhancedVolcano(protein_res,
+    lab = rownames(protein_res),
+    title = paste0("WT vs MUT (Protein) - ", gene),
+    subtitle = 'Missing - mean (group)',
+    titleLabSize = 14,
+    subtitleLabSize = 10,
+    captionLabSize = 10,
+    axisLabSize = 12,
+    legendVisible = F,
+    x = 'logFC',
+    y = 'adj.P.Val',FCcutoff=0.5,pCutoff = 1e-200)
+```
+
+```{r fig.height=5, fig.width=8}
+mutant = as.numeric(colnames(protein_knn) %in% cell_lines_mut)
+design <- model.matrix(~1 + mutant)
+
+fit <- lmFit(protein_knn, design)
+fit <- eBayes(fit)
+protein_res = topTable(fit, coef=ncol(design), number = nrow(protein_knn))
+EnhancedVolcano(protein_res,
+    lab = rownames(protein_res),
+    title = paste0("WT vs MUT (Protein) - ", gene),
+    subtitle = 'Missing - knn',
+    titleLabSize = 14,
+    subtitleLabSize = 10,
+    captionLabSize = 10,
+    axisLabSize = 12,
+    legendVisible = F,
+    x = 'logFC',
+    y = 'adj.P.Val',FCcutoff=0.3)
+```
+
+```{r}
+mutant = as.numeric(colnames(protein) %in% cell_lines_mut)
+design_dep <- data.frame(c(cell_lines_wt, cell_lines_mut), stringsAsFactors = F)
+colnames(design_dep) = "label"
+design_dep$condition = c(rep("WT", length(cell_lines_wt)), rep("MUT", length(cell_lines_mut)))
+design_dep$replicate = c(1:length(cell_lines_wt), 1:length(cell_lines_mut))
+protein_uni = data.frame(protein, check.names = F)
+protein_uni$name = rownames(protein)
+protein_uni$ID = rownames(protein)
+protein_se = make_se(protein_uni, 1:ncol(protein),design_dep)
+protein_impute = impute(protein_se, fun = "MinProb", q = 0.01)
+```
+
+```{r}
+data_diff <- test_diff(protein_impute, type = "control", control = "WT")
+dep <- add_rejections(data_diff, alpha = 0.05, lfc = log2(1.5))
+plot_volcano(dep, contrast = "MUT_vs_WT", label_size = 1, add_names = T)
+data_results <- get_results(dep)
+
+```
+

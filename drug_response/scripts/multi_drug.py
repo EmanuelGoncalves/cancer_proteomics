@@ -26,7 +26,7 @@ elif len(sys.argv) > 2:
 if not os.path.isdir(configs['work_dir']):
     os.system(f"mkdir -p {configs['work_dir']}")
 
-model_path = configs['model_path']
+model_path = configs['model_path'] if 'model_path' in configs else ""
 if not os.path.isdir(model_path):
     os.system(f"mkdir -p {model_path}")
 
@@ -109,8 +109,7 @@ ic50 = pd.read_csv(ic50_file, low_memory=False)
 min_cell_lines = configs['min_cell_lines']
 ic50_counts = ic50.groupby(['drug_id']).size()
 selected_drugs = ic50_counts[ic50_counts > min_cell_lines].index.values
-
-# selected_drugs = [257]
+logger.info(f"selected drugs {len(selected_drugs)}")
 
 ic50_selected = ic50[ic50['drug_id'].isin(selected_drugs)]
 ic50_selected_pivot = pd.pivot(ic50_selected[['cell_line_name', 'drug_id', configs['target']]], index='cell_line_name',
@@ -118,7 +117,7 @@ ic50_selected_pivot = pd.pivot(ic50_selected[['cell_line_name', 'drug_id', confi
 
 ic50_selected_pivot = ic50_selected_pivot.sort_values(by=['cell_line_name']).reset_index(drop=True)
 
-if configs['data_type'] in ['protein', 'protein_rep', 'rna_common', 'multiomic', 'peptide']:
+if configs['data_type'] in ['protein', 'protein_rep',  'multiomic', 'peptide']:
     data_sample = pd.read_csv(data_file, sep='\t')
 elif configs['data_type'] == 'rna':
     data_raw = pd.read_csv(data_file, index_col=0).T
@@ -129,6 +128,26 @@ elif configs['data_type'] == 'rna':
     data_sample = data_sample.sort_values(by=['Cell_line'])
     data_sample = data_sample.set_index(['Cell_line'])
     data_sample = data_sample.reset_index()
+elif configs['data_type'] == 'rna_common':
+    proteins = pd.read_csv(cell_lines_train_file, sep='\t', index_col=0).columns
+    data_raw = pd.read_csv(data_file, index_col=0).T
+    data_raw.index.name = 'SIDM'
+    data_raw = data_raw.reset_index()
+    data_sample = pd.merge(data_raw, meta[['SIDM', 'Cell_line']].drop_duplicates()).drop(['SIDM'],
+                                                                                         axis=1)
+    data_sample = data_sample.sort_values(by=['Cell_line'])
+    data_sample = data_sample.set_index(['Cell_line'])
+
+    name_map = pd.read_csv("/home/scai/SangerDrug/data/misc/HUMAN_9606_idmapping.gene_prot.dat",
+                           sep='\t',
+                           names=['ID', 'type', 'code'])
+    name_map = name_map.drop_duplicates(['ID', 'type'])
+    name_map = pd.pivot(name_map, index='ID', columns='type', values='code').dropna()
+    protein2rna_map = dict(zip(name_map['UniProtKB-ID'].values, name_map['Gene_Name'].values))
+    rna2protein_map = {v: k for k, v in protein2rna_map.items()}
+    genes = [protein2rna_map[x] for x in proteins]
+    genes = list(set(genes).intersection(data_sample.columns))
+    data_sample = data_sample[genes].reset_index()
 elif configs['data_type'].lower() in ('wes', 'cna', 'methylation'):
     data_sample = pd.read_csv(data_file)
 else:

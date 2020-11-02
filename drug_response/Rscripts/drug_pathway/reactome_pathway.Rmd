@@ -1,0 +1,30 @@
+```{r setup}
+library(ReactomePA)
+library(clusterProfiler)
+```
+
+```{r}
+df = read.table("../../result_files/top_drug_associations.csv",sep=",",stringsAsFactors = F, header = T)
+drugs = unique(df$drug_name)
+
+res = c()
+for (drug in drugs){
+  x = unique(df[df$drug_name==drug, "x_id"])
+  if(length(x)<10){
+    next
+  }
+  gene_ids = bitr(x, fromType="SYMBOL", toType="ENTREZID", OrgDb="org.Hs.eg.db")
+  pathways <- enrichPathway(gene=gene_ids$ENTREZID, pvalueCutoff=0.05, readable=T, qvalueCutoff = 0.1)
+  if (is.null(pathways)){
+    next
+  }
+  tmp = pathways@result
+  tmp$drug_name = drug
+  res = rbind(res, tmp)
+}
+
+res_out = res[, c("drug_name", "Description", "p.adjust", "geneID")]
+res_out = res_out[res_out$p.adjust < 0.1, ]
+write.table(res_out, "../../result_files/top_drug_pathways.csv", sep = ",", quote = F, row.names = F)
+```
+

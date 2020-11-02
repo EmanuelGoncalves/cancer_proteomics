@@ -91,7 +91,7 @@ meta = pd.read_csv(meta_file, sep='\t')
 
 ic50 = pd.read_csv(ic50_file, low_memory=False)
 
-if data_type.lower() in ('protein', 'rna_common', 'mofa'):
+if data_type.lower() in ('protein''mofa'):
     data_sample = pd.read_csv(data_file, sep='\t')
 elif data_type.lower() == 'rna':
     data_raw = pd.read_csv(data_file, index_col=0).T
@@ -99,6 +99,27 @@ elif data_type.lower() == 'rna':
     data_raw = data_raw.reset_index()
     data_sample = pd.merge(data_raw, meta[['SIDM', 'Cell_line']].drop_duplicates()).drop(['SIDM'],
                                                                                          axis=1)
+elif data_type.lower() == 'rna_common':
+    proteins = pd.read_csv(cell_lines_train_file, sep='\t', index_col=0).columns
+    data_raw = pd.read_csv(data_file, index_col=0).T
+    data_raw.index.name = 'SIDM'
+    data_raw = data_raw.reset_index()
+    data_sample = pd.merge(data_raw, meta[['SIDM', 'Cell_line']].drop_duplicates()).drop(['SIDM'],
+                                                                                         axis=1)
+    data_sample = data_sample.sort_values(by=['Cell_line'])
+    data_sample = data_sample.set_index(['Cell_line'])
+
+    name_map = pd.read_csv("/home/scai/SangerDrug/data/misc/HUMAN_9606_idmapping.gene_prot.dat",
+                           sep='\t',
+                           names=['ID', 'type', 'code'])
+    name_map = name_map.drop_duplicates(['ID', 'type'])
+    name_map = pd.pivot(name_map, index='ID', columns='type', values='code').dropna()
+    protein2rna_map = dict(zip(name_map['UniProtKB-ID'].values, name_map['Gene_Name'].values))
+    rna2protein_map = {v: k for k, v in protein2rna_map.items()}
+    genes = [protein2rna_map[x] for x in proteins]
+    genes = list(set(genes).intersection(data_sample.columns))
+    data_sample = data_sample[genes].reset_index()
+
 elif data_type.lower() == 'peptide':
     data_raw = pd.read_csv(data_file, sep='\t')
     data_raw_merge = pd.merge(data_raw, meta[['Automatic_MS_filename', 'Cell_line']])

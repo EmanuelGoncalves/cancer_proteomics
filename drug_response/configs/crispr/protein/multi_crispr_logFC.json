@@ -25,7 +25,7 @@
   "hidden_width": 18000,
   "hidden_size": 2,
   "lr": 3e-4,
-  "do_cv": false,
+  "do_cv": true,
   "group": 9000,
   "save_checkpoints": false,
   "save_scores": true,

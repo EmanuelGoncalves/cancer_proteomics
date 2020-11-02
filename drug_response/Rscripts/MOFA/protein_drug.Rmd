@@ -7,12 +7,14 @@ library(MOFA2)
 
 
 ```{r}
-model <- load_model("../../data/MOFA/protein_selected_drug.hdf5")
+model <- load_model("../../data/MOFA/protein_selected_drug_eg_id.hdf5")
 
 ```
 ```{r}
 p <- plot_variance_explained(model, x="factor", y="view", groups = "group_0")
-p + ggtitle("MOFA factors with explained variation") + theme(axis.text.x = element_text(color="black", angle=40, vjust=1, hjust=1), text=element_text(family="Helvetica"), plot.title = element_text(family="Helvetica", size=18)) + theme(strip.text = element_blank())
+p + ggtitle("MOFA factors with explained variation") + theme(axis.text.x = element_text(color="black", angle=40, vjust=1, hjust=1), text=element_text(family="Helvetica"), plot.title = element_text(family="Helvetica", size=18))
+ggsave("../../plots/drug/Fig4S-E_MOFA1.pdf", dpi=500)
+
 ```
 
 
@@ -66,9 +68,10 @@ ggsave("../../plots/Fig4S-E_MOFA2.pdf", dpi=500)
 ```{r fig.height=6}
 p = plot_weights(model,
   view = "protein",
-  factor = 3,
+  factor = 2,
   nfeatures = 8,     # Number of features to highlight
   scale = T           # Scale loadings from -1 to 1
 )
-p + theme(text=element_text(family="Helvetica"))
+p + theme(text=element_text(family="Helvetica")) + ggtitle("Top proteins for factor 2")
+ggsave("../../plots/drug/Fig4S-E_MOFA2.pdf", dpi=500)
 ```

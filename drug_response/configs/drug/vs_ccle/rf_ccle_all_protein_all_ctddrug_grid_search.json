@@ -1,0 +1,28 @@
+{
+  "meta_file": "/home/scai/SangerDrug/data/E0022_P06_final_sample_map_no_control.txt",
+  "data_file": "/home/scai/SangerDrug/data/ccle/protein_matrix_common_all_proteins.tsv",
+  "cell_lines_train": "/home/scai/SangerDrug/data/protein/E0022_P06_Protein_Matrix_ProNorM_no_control_train.txt",
+  "cell_lines_test": "/home/scai/SangerDrug/data/protein/E0022_P06_Protein_Matrix_ProNorM_no_control_test.txt",
+  "ic50_file": "/home/scai/SangerDrug/data/drug/ctd_common_drug_processed.csv.gz",
+  "model": "rf",
+  "cv": 5,
+  "params_grid": {
+    "criterion": ["mse"],
+    "n_estimators": [400, 600, 800, 1000],
+    "max_features": ["sqrt"],
+    "n_jobs": [1]
+  },
+  "imputer": "min",
+  "min_val": -2.242616,
+  "seed": 42,
+  "work_dir": "/home/scai/SangerDrug/work_dirs/vs_ccle/ctd_drug/RandomForest",
+  "min_cell_lines": 0,
+  "importance": false,
+  "data_type": "sanger_common",
+  "task": "regression",
+  "metric": "corr",
+  "sign": 1,
+  "save_scores": true,
+  "target": "auc",
+  "suffix": "_ccle_ctd_auc"
+}

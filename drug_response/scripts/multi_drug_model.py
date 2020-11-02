@@ -127,7 +127,6 @@ class MultiDrugResXNN(nn.Module):
             self.hidden.append(BottleNeck(hidden_width, group=group))
 
         self.output = nn.Linear(hidden_width, out_dim)
-        self.dropout = nn.Dropout(0.2)
 
     def forward(self, x):
         activation = logistic

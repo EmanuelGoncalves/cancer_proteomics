@@ -1,5 +1,5 @@
 """
-python grid_search_all.py configs/protein/mlp_grid_search.json
+python grid_search_all.py configs/drug/protein/dl_ic50.json
 """
 import pandas as pd
 import numpy as np

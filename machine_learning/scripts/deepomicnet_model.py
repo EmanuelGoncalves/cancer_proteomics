@@ -31,25 +31,6 @@ def corr_loss(output, target):
     return loss
 
 
-class MultiDrugNN(nn.Module):
-    def __init__(self, in_dim, out_dim, hidden_width, hidden_size=4):
-        super(MultiDrugNN, self).__init__()
-        self.hidden = nn.ModuleList()
-
-        self.input = nn.Linear(in_dim, hidden_width)
-        for k in range(hidden_size):
-            self.hidden.append(nn.Linear(hidden_width, hidden_width))
-        self.output = nn.Linear(hidden_width, out_dim)
-
-    def forward(self, x):
-        activation = logistic
-        x = activation(self.input(x))
-        for layer in self.hidden:
-            x = activation(layer(x))
-        x = self.output(x)
-        return x
-
-
 class BasicBlock(nn.Module):
     def __init__(self, hidden_width, module_length=2):
         super(BasicBlock, self).__init__()

@@ -1,3 +1,8 @@
+"""
+Train DeepOmicNet for down sampling analysis (drug response only)
+python deepomicnet_downsample.py configs/drug/downsample/DL/downsample_3000.json
+
+"""
 from sklearn.model_selection import KFold
 import logging
 import sys

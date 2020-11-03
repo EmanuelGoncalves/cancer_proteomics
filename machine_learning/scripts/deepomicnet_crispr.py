@@ -1,3 +1,7 @@
+"""
+Train DeepOmicNet for CRISPR knockout data
+python deepomicnet_crispr.py configs/crispr/protein/dl_crispr_logFC.json
+"""
 from sklearn.impute import SimpleImputer, KNNImputer
 from sklearn.model_selection import KFold
 import logging

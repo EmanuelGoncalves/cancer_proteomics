@@ -1,5 +1,7 @@
 """
-The script for training DeepOmicNet
+Train DeepOmicNet for drug response data
+python deepomicnet_drug.py configs/drug/protein/dl_ic50.json
+
 """
 from sklearn.impute import SimpleImputer, KNNImputer
 from sklearn.model_selection import KFold

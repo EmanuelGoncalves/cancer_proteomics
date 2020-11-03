@@ -1,5 +1,6 @@
 """
-python grid_search_all.py configs/drug/protein/dl_ic50.json
+Train traditional ML models for drug response prediction
+python grid_search_all_drug.py configs/drug/protein/rf_grid_search_ic50.json
 """
 import pandas as pd
 import numpy as np

@@ -1,3 +1,6 @@
+"""
+Script of generating protein sets for down sampling analysis
+"""
 import pandas as pd
 from pathlib import Path
 import numpy as np

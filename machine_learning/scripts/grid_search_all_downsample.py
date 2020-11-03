@@ -1,5 +1,6 @@
 """
-python grid_search_all.py configs/protein/mlp_grid_search.json
+Train RF for down sampling analysis (drug response only)
+python grid_search_all_downsample.py configs/drug/downsample/RF/downsample_3400_rf.json
 """
 import pandas as pd
 import numpy as np

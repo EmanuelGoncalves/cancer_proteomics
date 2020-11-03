@@ -1,5 +1,6 @@
 """
-python grid_search_all.py configs/protein/mlp_grid_search.json
+Train traditional ML models for CRISPR knockout effect prediction
+python grid_search_all_crispr.py configs/crispr/protein/rf_grid_search_crispr.json
 """
 import pandas as pd
 import numpy as np

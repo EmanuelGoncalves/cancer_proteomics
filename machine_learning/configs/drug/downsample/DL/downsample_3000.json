@@ -5,7 +5,7 @@
   "cell_lines_test": "/home/scai/SangerDrug/data/protein/E0022_P06_Protein_Matrix_ProNorM_no_control_test.txt",
   "ic50_file": "/home/scai/SangerDrug/data/drug/drug_final_processed_eg_id.csv",
   "downsample_file": "/home/scai/SangerDrug/data/protein/downsample/downsample_3000.csv",
-  "model": "MultiDrugResNN",
+  "model": "DeepOmicNet",
   "cv": 5,
   "imputer": "None",
   "seed": 42,

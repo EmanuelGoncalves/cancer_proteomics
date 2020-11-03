@@ -19,7 +19,7 @@
   "num_workers": 2,
   "log_freq": 20,
   "num_of_epochs": 150,
-  "model": "MultiDrugResNN",
+  "model": "DeepOmicNet",
   "hidden_width": 10000,
   "hidden_size": 0,
   "lr": 5e-4,

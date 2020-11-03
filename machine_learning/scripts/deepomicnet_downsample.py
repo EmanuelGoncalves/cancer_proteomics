@@ -8,7 +8,7 @@ import pandas as pd
 from radam import RAdam
 from torch.utils.data import DataLoader
 
-from multi_drug_model import *
+from deepominnet_model import *
 
 STAMP = datetime.today().strftime('%Y%m%d%H%M')
 
@@ -17,7 +17,7 @@ config_file = sys.argv[1]
 configs = json.load(open(config_file, 'r'))
 
 log_suffix = ''
-if configs['model'] == 'MultiDrugResNN':
+if configs['model'] == 'DeepOmicNet':
     log_suffix += "_res"
 else:
     log_suffix += "_resx"
@@ -64,12 +64,12 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
 def get_setup():
-    if 'model' in configs and configs['model'] == 'MultiDrugResNN':
-        model = MultiDrugResNN(train_df.shape[1], train_ic50.shape[1],
+    if 'model' in configs and configs['model'] == 'DeepOmicNet':
+        model = DeepOmicNet(train_df.shape[1], train_ic50.shape[1],
                                configs['hidden_width'], configs['hidden_size'])
 
     else:
-        model = MultiDrugResXNN(train_df.shape[1], train_ic50.shape[1],
+        model = DeepOmicNetG(train_df.shape[1], train_ic50.shape[1],
                                 configs['hidden_width'], configs['hidden_size'], group=configs['group'])
     model = model.to(device)
 

@@ -10,7 +10,7 @@ from radam import RAdam
 from torch.utils.data import DataLoader
 from sklearn.preprocessing import MinMaxScaler
 
-from multi_drug_model import *
+from .deepomicnet_model import *
 
 STAMP = datetime.today().strftime('%Y%m%d%H%M')
 
@@ -64,11 +64,11 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
 def get_setup():
-    if configs['model'] == 'MultiDrugResNN':
-        model = MultiDrugResNN(train_df.shape[1], train_crispr.shape[1],
+    if configs['model'] == 'DeepOmicNet':
+        model = DeepOmicNet(train_df.shape[1], train_crispr.shape[1],
                                configs['hidden_width'], configs['hidden_size'])
-    elif configs['model'] == 'MultiDrugResXNN':
-        model = MultiDrugResXNN(train_df.shape[1], train_crispr.shape[1],
+    elif configs['model'] == 'DeepOmicNetG':
+        model = DeepOmicNetG(train_df.shape[1], train_crispr.shape[1],
                                 configs['hidden_width'], configs['hidden_size'], group=configs['group'])
 
     model = model.to(device)

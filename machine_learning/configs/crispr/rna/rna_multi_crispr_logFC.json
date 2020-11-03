@@ -17,7 +17,7 @@
   "metric": "corr",
   "loss": "mse",
   "sign": 1,
-  "model  ": "MultiDrugResXNN",
+  "model  ": "DeepOmicNetG",
   "batch_size": 50,
   "num_workers": 0,
   "log_freq": 20,

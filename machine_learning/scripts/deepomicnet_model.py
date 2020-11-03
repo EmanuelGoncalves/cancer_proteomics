@@ -1,3 +1,6 @@
+"""
+This file contains utility scripts and model architectures
+"""
 import torch
 from torch.utils.data import Dataset
 import torch.nn as nn
@@ -15,6 +18,17 @@ IGNORE_INDEX = -100
 
 def logistic(x):
     return 1 / (1 + torch.exp(-x))
+
+
+def corr_loss(output, target):
+    x = output
+    y = target
+
+    vx = x - torch.mean(x)
+    vy = y - torch.mean(y)
+    loss = 50 * (1 - torch.sum(vx * vy) / (torch.sqrt(torch.sum(vx ** 2)) * torch.sqrt(torch.sum(vy ** 2))))
+
+    return loss
 
 
 class MultiDrugNN(nn.Module):
@@ -86,9 +100,9 @@ class BottleNeck(nn.Module):
         return out
 
 
-class MultiDrugResNN(nn.Module):
+class DeepOmicNet(nn.Module):
     def __init__(self, in_dim, out_dim, hidden_width, hidden_size=2):
-        super(MultiDrugResNN, self).__init__()
+        super(DeepOmicNet, self).__init__()
 
         self.input = nn.Linear(in_dim, hidden_width)
         self.hidden = nn.ModuleList()
@@ -106,9 +120,9 @@ class MultiDrugResNN(nn.Module):
         return x
 
 
-class MultiDrugResXNN(nn.Module):
+class DeepOmicNetG(nn.Module):
     def __init__(self, in_dim, out_dim, hidden_width, hidden_size=2, group=20):
-        super(MultiDrugResXNN, self).__init__()
+        super(DeepOmicNetG, self).__init__()
 
         self.input = nn.Linear(in_dim, hidden_width)
         self.hidden = nn.ModuleList()

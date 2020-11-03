@@ -4,7 +4,7 @@
   "cell_lines_train": "/home/scai/SangerDrug/data/protein/E0022_P06_Protein_Matrix_ProNorM_no_control_train.txt",
   "cell_lines_test": "/home/scai/SangerDrug/data/protein/E0022_P06_Protein_Matrix_ProNorM_no_control_test.txt",
   "ic50_file": "/home/scai/SangerDrug/data/drug/ctd_common_drug_processed.csv.gz",
-  "model": "MultiDrugResNN",
+  "model": "DeepOmicNet",
   "cv": 5,
   "imputer": "None",
   "seed": 42,

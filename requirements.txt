@@ -12,3 +12,5 @@ mofapy2
 adjustText
 cy>0.4.0
 matplotlib_venn
+openpyxl
+igraph

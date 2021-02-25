@@ -133,9 +133,9 @@ LOG.info(f"Overlapping Samples = {len(samples_overlap)}")
 df_corr = (
     pd.concat(
         [
-            df_correlation(prot.reindex(index=genes, columns=samples_overlap).T).add_prefix("prot_"),
-            df_correlation(gexp.reindex(index=genes, columns=samples_overlap).T).add_prefix("gexp_"),
-            df_correlation(crispr.reindex(index=genes, columns=samples_overlap).T).add_prefix("crispr_"),
+            df_correlation(prot.reindex(index=genes).T).add_prefix("prot_"),
+            df_correlation(gexp.reindex(index=genes).T).add_prefix("gexp_"),
+            df_correlation(crispr.reindex(index=genes).T).add_prefix("crispr_"),
         ],
         axis=1,
     )
@@ -188,8 +188,8 @@ df_corr["merged_pvalue"] = df_corr[
 ].prod(1)
 
 # Export
-df_corr.to_csv(f"{TPATH}/PPInteractions_overlap.csv.gz", compression="gzip", index=False)
-# df_corr = pd.read_csv(f"{TPATH}/PPInteractions_overlap.csv.gz")
+df_corr.to_csv(f"{TPATH}/PPInteractions.csv.gz", compression="gzip", index=False)
+# df_corr = pd.read_csv(f"{TPATH}/PPInteractions.csv.gz")
 
 #
 #

@@ -6,9 +6,12 @@ import numpy as np
 import pandas as pd
 import pkg_resources
 import matplotlib.pyplot as plt
+from crispy.Utils import Utils
 from sklearn.manifold import TSNE
+from crispy.DataImporter import PPI
 from crispy.CrispyPlot import CrispyPlot
 from scipy.stats import spearmanr, pearsonr
+from crispy.LMModels import LMModels, LModel
 from sklearn.decomposition import FactorAnalysis, PCA
 
 
@@ -63,14 +66,14 @@ PALETTE_TTYPE = {
     "Breast": "#fbceb1",
     "Bone": "#ff033e",
     "Ovary": "#ab274f",
-    "Skin": "#f2f3f4",
+    "Skin": "#d5e6f7",
     "Head and Neck": "#7cb9e8",
     "Endometrium": "#efdecd",
     "Adrenal Gland": "#8db600",
     "Central Nervous System": "#e9d66b",
     "Pancreas": "#b284be",
     "Prostate": "#b2beb5",
-    "Peripheral Nervous System": "#f0f8ff",
+    "Peripheral Nervous System": "#10b36f",
     "Large Intestine": "#6e7f80",
     "Cervix": "#ff7e00",
     "Kidney": "#87a96b",
@@ -114,7 +117,23 @@ PALETTE_PERTURB = {
     "HCC1395 1% FBS": "#98df8a",
     "HCC1143 10% FBS": "#d62728",
     "HCC1143 1% FBS": "#ff9896",
+    "MRC-5 (EXPO)": "#756bb1",
+    "MRC-5 Arrested (5 days @100% confluent)": "#9e9ac8",
+    "MRC-5 Arrested (8 days @100% confluent)": "#bcbddc",
 }
+
+PPI_PAL = {
+    "T": "#fc8d62",
+    "1": "#656565",
+    "2": "#7c7c7c",
+    "3": "#949494",
+    "4": "#ababab",
+    "5+": "#c3c3c3",
+    "-": "#2b8cbe",
+    "X": "#2ca02c",
+}
+
+PPI_ORDER = ["T", "1", "2", "3", "4", "5+", "-"]
 
 
 def two_vars_correlation(var1, var2, idx_set=None, method="pearson", verbose=0):
@@ -141,6 +160,43 @@ def two_vars_correlation(var1, var2, idx_set=None, method="pearson", verbose=0):
 
 class DataImport:
     DPATH = pkg_resources.resource_filename("data", "/")
+
+    @classmethod
+    def lm_ppi_annotate_table(cls, table, ppi, y_skew, drug_targets=None):
+        if drug_targets is not None:
+            # Machine learning scores
+            ml_scores = pd.read_csv(
+                f"{cls.DPATH}/Drug_ML/DL/score_dl_min300_ic50_eg_id.csv", index_col=0
+            )["test"]
+            table["r2"] = ml_scores.reindex(table["y_id"]).values
+
+            # Drug target annotation
+            table["target"] = drug_targets.loc[table["y_id"]].values
+
+            # PPI annotation
+            table = PPI.ppi_annotation(
+                table, ppi, x_var="target", y_var="x_id", ppi_var="ppi"
+            )
+
+            # Skewness annotation
+            table["skew"] = y_skew.loc[table["y_id"]].values
+
+        else:
+            # Machine learning scores
+            ml_scores = pd.read_csv(
+                f"{cls.DPATH}/CRISPR_ML/DL/score_dl_crispr_protein.csv.gz", index_col=0
+            )["test"]
+            table["r2"] = ml_scores.reindex(table["y_id"]).values
+
+            # PPI annotation
+            table = PPI.ppi_annotation(
+                table, ppi, x_var="y_id", y_var="x_id", ppi_var="ppi"
+            )
+
+            # Skewness annotation
+            table["skew"] = y_skew.loc[table["y_id"]].values
+
+        return table
 
     @classmethod
     def read_samplesheet(cls):
@@ -173,7 +229,7 @@ class DataImport:
         return manifest
 
     @classmethod
-    def read_protein_matrix(cls, map_protein=False, subset=None):
+    def read_protein_matrix(cls, map_protein=False, subset=None, min_measurements=None):
         """
         Read protein level matrix.
 
@@ -209,19 +265,30 @@ class DataImport:
         if subset is not None:
             protein = protein.loc[:, protein.columns.isin(subset)]
 
+        if min_measurements is not None:
+            protein = protein[protein.count(1) > 300]
+
         return protein
 
     @classmethod
     def read_protein_perturbation_manifest(cls):
-        manifest = pd.read_csv(
-            f"{cls.DPATH}/E0019_BreastCan_ProteinMatrix_LoessNorm_byDiffacto.csv",
-            index_col=0,
-        ).T.iloc[:12].T
+        manifest = (
+            pd.read_csv(
+                f"{cls.DPATH}/E0019_BreastCan_ProteinMatrix_LoessNorm_byDiffacto.csv",
+                index_col=0,
+            )
+            .T.iloc[:12]
+            .T
+        )
 
-        manifest = manifest.replace({"Cell Line": {
-            "T-47D 10%FBS": "T-47D 10% FBS",
-            "T-47D 1%FBS": "T-47D 1% FBS",
-        }})
+        manifest = manifest.replace(
+            {
+                "Cell Line": {
+                    "T-47D 10%FBS": "T-47D 10% FBS",
+                    "T-47D 1%FBS": "T-47D 1% FBS",
+                }
+            }
+        )
 
         return manifest
 
@@ -233,10 +300,14 @@ class DataImport:
         :return:
         """
         # Read protein level normalised intensities
-        protein = pd.read_csv(
-            f"{cls.DPATH}/E0019_BreastCan_ProteinMatrix_LoessNorm_byDiffacto.csv",
-            index_col=0,
-        ).T.iloc[12:].astype(float)
+        protein = (
+            pd.read_csv(
+                f"{cls.DPATH}/E0019_BreastCan_ProteinMatrix_LoessNorm_byDiffacto.csv",
+                index_col=0,
+            )
+            .T.iloc[12:]
+            .astype(float)
+        )
 
         # Map protein to gene symbols
         if map_protein:
@@ -287,13 +358,13 @@ class DataImport:
         return pd.read_csv(f"{cls.DPATH}/copynumber_total_new_map.csv.gz", index_col=0)
 
     @classmethod
-    def map_gene_name(cls, index_col="Entry name"):
+    def map_gene_name(cls, index_col="Entry name", value_col="Gene names  (primary )"):
         idmap = pd.read_csv(f"{cls.DPATH}/uniprot_human_idmap.tab.gz", sep="\t")
 
         if index_col is not None:
             idmap = idmap.dropna(subset=[index_col]).set_index(index_col)
 
-        idmap["GeneSymbol"] = idmap["Gene names  (primary )"].apply(
+        idmap["GeneSymbol"] = idmap[value_col].apply(
             lambda v: v.split("; ")[0] if str(v).lower() != "nan" else v
         )
 
@@ -341,6 +412,7 @@ class DataImport:
         sample_columns=["model_id"],
         dtype="ln_IC50",
         subset=None,
+        min_measurements=None,
     ):
         drugresponse = pd.read_csv(
             f"{cls.DPATH}/DrugResponse_PANCANCER_GDSC1_GDSC2_20200602.csv.gz"
@@ -357,8 +429,15 @@ class DataImport:
                 fill_value=np.nan,
             )
 
+            drugresponse = drugresponse.set_index(
+                pd.Series([";".join(map(str, i)) for i in drugresponse.index])
+            )
+
         if subset is not None:
             drugresponse = drugresponse.loc[:, drugresponse.columns.isin(subset)]
+
+        if min_measurements is not None:
+            drugresponse = drugresponse[drugresponse.count(1) > 300]
 
         return drugresponse
 
@@ -372,7 +451,21 @@ class DataImport:
             "max_screening_conc"
         ].first()
 
+        maxconcentration.index = [";".join(map(str, i)) for i in maxconcentration.index]
+
         return maxconcentration
+
+    @classmethod
+    def read_drug_target(cls):
+        drugresponse = cls.read_drug_response(as_matrix=False)
+
+        dtargets = drugresponse.groupby(["drug_id", "drug_name", "dataset"])[
+            "putative_gene_target"
+        ].first()
+
+        dtargets.index = [";".join(map(str, i)) for i in dtargets.index]
+
+        return dtargets
 
     @classmethod
     def read_methylation_matrix(cls, subset=None):
@@ -384,6 +477,36 @@ class DataImport:
             methy_promoter = methy_promoter.loc[:, methy_promoter.columns.isin(subset)]
 
         return methy_promoter
+
+    @classmethod
+    def read_ctrp(cls, subset=None):
+        drespo = pd.read_csv(f"{cls.DPATH}/CTRPv2.0_AUC_parsed.csv.gz", index_col=0)
+
+        return drespo
+
+    @classmethod
+    def read_wes(cls):
+        data = pd.read_csv(f"{cls.DPATH}/WES_variants.csv.gz")
+        return data
+
+    @classmethod
+    def read_prism(cls):
+        ss = cls.read_samplesheet().reset_index().set_index("model_name")
+        data = pd.read_csv(f"{cls.DPATH}/drug_all_ccle_secondary_processed_auc.csv")
+        data["model_id"] = ss.loc[data["cell_line_name"], "model_id"].values
+        data = pd.pivot_table(data, index="drug_id", columns="model_id", values="auc")
+        return data
+
+    @classmethod
+    def read_prism_depmap_19q4(cls):
+        data = pd.read_csv(f"{cls.DPATH}/secondary-screen-dose-response-curve-parameters.csv")
+        data = pd.pivot_table(data, index="broad_id", columns="depmap_id", values="auc")
+        return data
+
+    @classmethod
+    def read_cmp_samplesheet(cls):
+        ss = pd.read_csv(f"{cls.DPATH}/model_list_20200825.csv")
+        return ss
 
 
 class DimReduction:

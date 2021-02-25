@@ -24,11 +24,11 @@ import pandas as pd
 import pkg_resources
 import seaborn as sns
 import matplotlib.pyplot as plt
-from GIPlot import GIPlot
+from crispy.GIPlot import GIPlot
 from crispy.Utils import Utils
 from crispy.CrispyPlot import CrispyPlot
 from sklearn.mixture import GaussianMixture
-from scripts import two_vars_correlation
+from cancer_proteomics.notebooks import DataImport, two_vars_correlation
 from crispy.Enrichment import Enrichment, SSGSEA
 from crispy.DataImporter import Proteomics, GeneExpression, CopyNumber
 
@@ -73,6 +73,15 @@ if __name__ == "__main__":
     gexp_t = pd.DataFrame(
         {i: Utils.gkn(gexp.loc[i].dropna()).to_dict() for i in genes}
     ).T
+
+    ##
+    #
+    s_corr = pd.DataFrame({
+        s1: {
+            s2: two_vars_correlation(prot[s1], gexp[s2])["corr"] for s2 in samples
+        } for s1 in samples
+    })
+    s_corr.to_csv("/Users/Downloads/Proteomics_Transcriptomics_Corr_Matrix.csv")
 
     # Sample-wise Protein/Gene correlation with CopyNumber - Attenuation
     #

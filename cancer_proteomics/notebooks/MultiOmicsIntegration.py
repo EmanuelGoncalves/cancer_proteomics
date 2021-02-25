@@ -118,6 +118,18 @@ for f in mofa.factors:
         )["corr"]
 n_factors_corr = pd.DataFrame(n_factors_corr)
 
+n_factors_pval = {}
+for f in mofa.factors:
+    n_factors_pval[f] = {}
+
+    for c in covariates:
+        fc_samples = list(covariates.reindex(mofa.factors[f].index)[c].dropna().index)
+        n_factors_pval[f][c] = two_vars_correlation(
+            mofa.factors[f][fc_samples], covariates[c][fc_samples]
+        )
+n_factors_pval = pd.DataFrame(n_factors_pval)
+
+
 # Factor clustermap
 MOFAPlot.factors_corr_clustermap(mofa)
 plt.savefig(f"{RPATH}/MultiOmics_factors_corr_clustermap.pdf", bbox_inches="tight")

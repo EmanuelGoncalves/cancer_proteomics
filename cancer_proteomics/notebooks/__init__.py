@@ -205,7 +205,7 @@ class DataImport:
 
         :return:
         """
-        return pd.read_csv(f"{cls.DPATH}/E0022_P06_samplehseet.csv", index_col=0)
+        return pd.read_excel(f"{cls.DPATH}/SupplementaryTable1_STR_failed_removed.xlsx", index_col=0)
 
     @classmethod
     def read_manifest(cls):
@@ -235,18 +235,12 @@ class DataImport:
 
         :return:
         """
-        # Read manifest
-        manifest = cls.read_manifest()
-
         # Read protein level normalised intensities
         protein = pd.read_csv(
-            f"{cls.DPATH}/E0022_P06_Protein_Matrix_ProNorM.tsv.gz",
+            f"{cls.DPATH}/E0022_P06_Protein_Matrix_ProNorM_STR_failed_removed.tsv.gz",
             sep="\t",
             index_col=0,
         ).T
-
-        # Discard control samples
-        protein = protein.rename(columns=manifest.groupby("Cell_line")["SIDM"].first())
 
         exclude_controls = [
             "Control_HEK293T_lys",
@@ -380,7 +374,7 @@ class DataImport:
     @classmethod
     def read_crispr_matrix(cls, subset=None):
         merged = pd.read_csv(
-            f"{cls.DPATH}/CRISPRcleanR_FC.txt.gz", index_col=0, sep="\t"
+            f"{cls.DPATH}/crispr_proteomics_model_id_20210223.csv.gz", index_col=0, sep="\t"
         )
 
         sid = cls.read_crispr_sids()

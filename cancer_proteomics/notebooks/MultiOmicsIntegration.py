@@ -72,7 +72,7 @@ covariates = pd.concat(
         gexp.loc[["CDH1", "VIM"]].T.add_suffix("_gexp"),
         pd.get_dummies(ss["media"]),
         pd.get_dummies(ss["growth_properties"]),
-        pd.get_dummies(ss["tissue"])[["Haematopoietic and Lymphoid", "Lung"]],
+        pd.get_dummies(ss["Tissue_type"])[["Haematopoietic and Lymphoid", "Lung"]],
         ss[["ploidy", "mutational_burden", "growth", "size"]],
         ss["replicates_correlation"].rename("RepsCorrelation"),
         prot.mean().rename("MeanProteomics"),
@@ -86,7 +86,7 @@ covariates = pd.concat(
 # ### MOFA
 
 # Group Haematopoietic and Lymphoid cell lines separetly from the rest
-groupby = ss.loc[prot.columns, "tissue"].apply(
+groupby = ss.loc[prot.columns, "Tissue_type"].apply(
     lambda v: "Haem" if v == "Haematopoietic and Lymphoid" else "Other"
 )
 
@@ -98,7 +98,7 @@ mofa = MOFA(
     groupby=groupby,
     iterations=2000,
     use_overlap=False,
-    convergence_mode="fast",
+    convergence_mode="slow",
     factors_n=15,
     from_file=f"{TPATH}/MultiOmics.hdf5",
     verbose=2,
@@ -147,7 +147,7 @@ plt.savefig(
 plt.close("all")
 
 # Covairates correlation heatmap
-MOFAPlot.covariates_heatmap(n_factors_corr, mofa, ss["tissue"])
+MOFAPlot.covariates_heatmap(n_factors_corr, mofa, ss["Tissue_type"])
 plt.savefig(
     f"{RPATH}/MultiOmics_factors_covariates_clustermap.pdf", bbox_inches="tight"
 )
@@ -167,7 +167,7 @@ plot_df = pd.concat(
         mofa.factors[[f_x, f_y]],
         gexp.loc[["CDH1", "VIM"]].T.add_suffix("_transcriptomics"),
         prot.loc[["CDH1", "VIM"]].T.add_suffix("_proteomics"),
-        ss["tissue"],
+        ss["Tissue_type"],
     ],
     axis=1,
     sort=False,

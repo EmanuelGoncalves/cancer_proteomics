@@ -16,78 +16,84 @@ from sklearn.decomposition import FactorAnalysis, PCA
 
 
 PALETTE_CTYPE = {
-    "B-Cell Non-Hodgkin's Lymphoma": "#007fff",
-    "Plasma Cell Myeloma": "#665d1e",
-    "Acute Myeloid Leukemia": "#ffbf00",
-    "Other Solid Carcinomas": "#fbceb1",
-    "Gastric Carcinoma": "#ff033e",
-    "T-Lymphoblastic Leukemia": "#ab274f",
-    "Breast Carcinoma": "#f2f3f4",
-    "Ewing's Sarcoma": "#7cb9e8",
-    "Ovarian Carcinoma": "#efdecd",
-    "Melanoma": "#8db600",
+    "Non-Small Cell Lung Carcinoma": "#007fff",
+    "Prostate Carcinoma": "#665d1e",
+    "Gastric Carcinoma": "#ffbf00",
+    "Glioblastoma": "#fbceb1",
+    "Melanoma": "#ff033e",
+    "Bladder Carcinoma": "#ab274f",
+    "B-Lymphoblastic Leukemia": "#d5e6f7",
+    "Kidney Carcinoma": "#7cb9e8",
+    "Thyroid Gland Carcinoma": "#efdecd",
+    "Rhabdomyosarcoma": "#8db600",
     "Head and Neck Carcinoma": "#e9d66b",
-    "Endometrial Carcinoma": "#b284be",
-    "Glioblastoma": "#b2beb5",
-    "Small Cell Lung Carcinoma": "#f0f8ff",
-    "Pancreatic Carcinoma": "#6e7f80",
-    "Burkitt's Lymphoma": "#ff7e00",
-    "Mesothelioma": "#87a96b",
-    "B-Lymphoblastic Leukemia": "#c9ffe5",
-    "Prostate Carcinoma": "#9f2b68",
-    "Neuroblastoma": "#00ffff",
-    "Non-Small Cell Lung Carcinoma": "#008000",
-    "Chronic Myelogenous Leukemia": "#cd9575",
-    "Colorectal Carcinoma": "#72a0c1",
-    "Cervical Carcinoma": "#a32638",
-    "Kidney Carcinoma": "#9966cc",
-    "Oral Cavity Carcinoma": "#f19cbb",
-    "Hepatocellular Carcinoma": "#e32636",
-    "Non-Cancerous": "#3b7a57",
-    "Biliary Tract Carcinoma": "#faebd7",
-    "Glioma": "#fdee00",
-    "Squamous Cell Lung Carcinoma": "#00308f",
-    "Bladder Carcinoma": "#7fffd4",
-    "Esophageal Squamous Cell Carcinoma": "#c46210",
-    "Hodgkin's Lymphoma": "#a8bb19",
-    "Rhabdomyosarcoma": "#ff9966",
-    "Thyroid Gland Carcinoma": "#a52a2a",
-    "T-Cell Non-Hodgkin's Lymphoma": "#568203",
-    "Esophageal Carcinoma": "#4b5320",
-    "Other Blood Carcinomas": "#5d8aa8",
-    "Osteosarcoma": "#8f9779",
-    "Chondrosarcoma": "#915c83",
+    "Ovarian Carcinoma": "#b284be",
+    "B-Cell Non-Hodgkin's Lymphoma": "#b2beb5",
+    "Other Solid Carcinomas": "#10b36f",
+    "Ewing's Sarcoma": "#6e7f80",
+    "T-Lymphoblastic Leukemia": "#ff7e00",
+    "Plasma Cell Myeloma": "#87a96b",
+    "Endometrial Carcinoma": "#c9ffe5",
+    "Non-Cancerous": "#9f2b68",
+    "Breast Carcinoma": "#00ffff",
+    "Pancreatic Carcinoma": "#008000",
+    "Neuroblastoma": "#cd9575",
+    "Burkitt's Lymphoma": "#72a0c1",
+    "Hairy Cell Leukemia": "#a32638",
+    "Chronic Myelogenous Leukemia": "#9966cc",
+    "Glioma": "#f19cbb",
+    "Cervical Carcinoma": "#e32636",
+    "Colorectal Carcinoma": "#3b7a57",
+    "Hepatocellular Carcinoma": "#faebd7",
+    "Vulvar carcinoma": "#fdee00",
+    "Osteosarcoma": "#00308f",
+    "Chondrosarcoma": "#7fffd4",
+    "Small Cell Lung Carcinoma": "#c46210",
+    "Esophageal Carcinoma": "#a8bb19",
+    "Uncertain": "#ff9966",
+    "T-Cell Non-Hodgkin's Lymphoma": "#a52a2a",
+    "Non-small Cell Lung Carcinoma": "#568203",
+    "Other Sarcomas": "#4b5320",
+    "Biliary Tract Carcinoma": "#5d8aa8",
+    "Acute Myeloid Leukemia": "#8f9779",
+    "Hodgkin's Lymphoma": "#915c83",
+    "Mesothelioma": "#841b2d",
+    "B-Lymphoblastic leukemia": "#a4c639",
+    "Other Blood Cancers": "#3b444b",
+    "Carcinoid Tumour": "#006600",
+    "Leiomyosarcoma": "#0000ff",
+    "T-cell Non-Hodgkin's Lymphoma": "#666699",
 }
 
 PALETTE_TTYPE = {
-    "Haematopoietic and Lymphoid": "#007fff",
-    "Lung": "#665d1e",
+    "Lung": "#007fff",
+    "Prostate": "#665d1e",
     "Stomach": "#ffbf00",
-    "Breast": "#fbceb1",
-    "Bone": "#ff033e",
-    "Ovary": "#ab274f",
-    "Skin": "#d5e6f7",
-    "Head and Neck": "#7cb9e8",
-    "Endometrium": "#efdecd",
-    "Adrenal Gland": "#8db600",
-    "Central Nervous System": "#e9d66b",
-    "Pancreas": "#b284be",
-    "Prostate": "#b2beb5",
-    "Peripheral Nervous System": "#10b36f",
-    "Large Intestine": "#6e7f80",
-    "Cervix": "#ff7e00",
-    "Kidney": "#87a96b",
-    "Liver": "#c9ffe5",
-    "Soft Tissue": "#9f2b68",
-    "Biliary Tract": "#00ffff",
-    "Bladder": "#008000",
+    "Central Nervous System": "#fbceb1",
+    "Skin": "#ff033e",
+    "Bladder": "#ab274f",
+    "Haematopoietic and Lymphoid": "#d5e6f7",
+    "Kidney": "#7cb9e8",
+    "Thyroid": "#efdecd",
+    "Soft Tissue": "#8db600",
+    "Head and Neck": "#e9d66b",
+    "Ovary": "#b284be",
+    "Bone": "#b2beb5",
+    "Endometrium": "#10b36f",
+    "Breast": "#6e7f80",
+    "Pancreas": "#ff7e00",
+    "Peripheral Nervous System": "#87a96b",
+    "Cervix": "#c9ffe5",
+    "Large Intestine": "#9f2b68",
+    "Liver": "#00ffff",
+    "Vulva": "#008000",
     "Esophagus": "#cd9575",
-    "Testis": "#72a0c1",
-    "Thyroid": "#a32638",
-    "Vulva": "#9966cc",
-    "Uterus": "#f19cbb",
-    "Small Intestine": "#e32636",
-    "Placenta": "#3b7a57",
+    "Biliary Tract": "#72a0c1",
+    "Other tissue": "#a32638",
+    "Small Intestine": "#9966cc",
+    "Placenta": "#f19cbb",
+    "Testis": "#e32636",
+    "Adrenal Gland": "#3b7a57",
 }
 
 PALETTE_INSTRUMENT = {
@@ -166,8 +172,8 @@ class DataImport:
         if drug_targets is not None:
             # Machine learning scores
             ml_scores = pd.read_csv(
-                f"{cls.DPATH}/Drug_ML/DL/score_dl_min300_ic50_eg_id.csv", index_col=0
-            )["test"]
+                f"{cls.DPATH}/score_dl_min300_ic50_eg_id.csv", index_col=0
+            )["corr"]
             table["r2"] = ml_scores.reindex(table["y_id"]).values
 
             # Drug target annotation
@@ -184,8 +190,8 @@ class DataImport:
         else:
             # Machine learning scores
             ml_scores = pd.read_csv(
-                f"{cls.DPATH}/CRISPR_ML/DL/score_dl_crispr_protein.csv.gz", index_col=0
-            )["test"]
+                f"{cls.DPATH}/score_dl_crispr_protein.csv", index_col=0
+            )["corr"]
             table["r2"] = ml_scores.reindex(table["y_id"]).values
 
             # PPI annotation
@@ -205,7 +211,9 @@ class DataImport:
 
         :return:
         """
-        return pd.read_excel(f"{cls.DPATH}/SupplementaryTable1_STR_failed_removed.xlsx", index_col=0)
+        return pd.read_excel(
+            f"{cls.DPATH}/SupplementaryTable1.xlsx", index_col=0, sheet_name="Panel"
+        )
 
     @classmethod
     def read_manifest(cls):
@@ -236,18 +244,21 @@ class DataImport:
         :return:
         """
         # Read protein level normalised intensities
-        protein = pd.read_csv(
-            f"{cls.DPATH}/E0022_P06_Protein_Matrix_ProNorM_STR_failed_removed.tsv.gz",
-            sep="\t",
-            index_col=0,
-        ).T
+        protein = (
+            pd.read_csv(
+                f"{cls.DPATH}/E0022_P06_Protein_Matrix_ProNorM_STR_failed_removed.csv.gz",
+            )
+            .drop(columns=["Cell_line"])
+            .set_index("model_id")
+            .T
+        )
 
         exclude_controls = [
             "Control_HEK293T_lys",
             "Control_HEK293T_std_H002",
             "Control_HEK293T_std_H003",
         ]
-        protein = protein.drop(columns=exclude_controls)
+        protein = protein.drop(columns=exclude_controls, errors="ignore")
 
         # Map protein to gene symbols
         if map_protein:
@@ -373,8 +384,14 @@ class DataImport:
 
     @classmethod
     def read_crispr_matrix(cls, subset=None):
-        merged = pd.read_csv(
-            f"{cls.DPATH}/crispr_proteomics_model_id_20210223.csv.gz", index_col=0, sep="\t"
+        merged = (
+            pd.read_csv(
+                f"{cls.DPATH}/crispr_proteomics_model_id_20210223.csv.gz",
+                sep=",",
+            )
+            .drop(columns=["Cell_line"])
+            .set_index("model_id")
+            .T
         )
 
         sid = cls.read_crispr_sids()
@@ -387,16 +404,11 @@ class DataImport:
 
     @classmethod
     def read_crispr_institute(cls):
-        merged = cls.read_crispr_matrix()
-
-        merged_institute = pd.Series(
-            {c: "Broad" if c.startswith("ACH-") else "Sanger" for c in merged}
+        cannot = pd.read_csv(
+            f"{cls.DPATH}/crispr_proteomics_model_id_annotation_20210223.tsv", sep="\t"
         )
-
-        sid = cls.read_crispr_sids()
-        merged_institute = merged_institute.rename(index=sid)
-
-        return merged_institute
+        cannot = cannot.query("Duplicate == False").dropna(subset=["CMP_ID"])
+        return cannot.set_index("CMP_ID")["source"]
 
     @classmethod
     def read_drug_response(
@@ -459,6 +471,8 @@ class DataImport:
 
         dtargets.index = [";".join(map(str, i)) for i in dtargets.index]
 
+        dtargets = dtargets.fillna(np.nan)
+
         return dtargets
 
     @classmethod
@@ -493,13 +507,15 @@ class DataImport:
 
     @classmethod
     def read_prism_depmap_19q4(cls):
-        data = pd.read_csv(f"{cls.DPATH}/secondary-screen-dose-response-curve-parameters.csv")
+        data = pd.read_csv(
+            f"{cls.DPATH}/secondary-screen-dose-response-curve-parameters.csv"
+        )
         data = pd.pivot_table(data, index="broad_id", columns="depmap_id", values="auc")
         return data
 
     @classmethod
     def read_cmp_samplesheet(cls):
-        ss = pd.read_csv(f"{cls.DPATH}/model_list_20200825.csv")
+        ss = pd.read_csv(f"{cls.DPATH}/model_list_20210212.csv")
         return ss
 
 

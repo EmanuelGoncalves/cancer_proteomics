@@ -34,7 +34,6 @@ from limix.plot import qqplot
 from crispy.GIPlot import GIPlot
 from scipy.stats import pearsonr, spearmanr
 from adjustText import adjust_text
-from sklearn.metrics.ranking import auc
 from crispy.Enrichment import Enrichment
 from crispy.CrispyPlot import CrispyPlot
 from sklearn.mixture import GaussianMixture
@@ -76,7 +75,7 @@ lm_crispr = pd.read_csv(f"{TPATH}/lm_sklearn_degr_crispr_annotated.csv.gz")
 #
 for dtype, lm_df in [("Drug-Protein", lm_drug), ("CRISPR-Protein", lm_crispr)]:
     for pvar in ["nc_pval", "pval"]:
-        # _, ax = plt.subplots(1, 1, figsize=(3, 3), dpi=600)
+        _, ax = plt.subplots(1, 1, figsize=(3, 3), dpi=600)
 
         plot_df = []
         for n in PPI_ORDER:

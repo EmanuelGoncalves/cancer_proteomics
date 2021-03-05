@@ -30,14 +30,10 @@ import matplotlib.pyplot as plt
 from natsort import natsorted
 from crispy.GIPlot import GIPlot
 from scipy.stats import pearsonr, spearmanr
-from adjustText import adjust_text
-from sklearn.metrics.ranking import auc
-from crispy.Enrichment import Enrichment
-from crispy.CrispyPlot import CrispyPlot
-from sklearn.mixture import GaussianMixture
+from sklearn.metrics import auc
 from statsmodels.stats.multitest import multipletests
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-from cancer_proteomics.notebooks import DataImport, two_vars_correlation
+from cancer_proteomics.notebooks import DataImport
 from crispy.DataImporter import (
     CORUM,
     BioGRID,
@@ -79,7 +75,7 @@ huri_db = HuRI(ddir=PPIPATH)
 
 # ###
 # Gene lists
-cgenes = pd.read_csv(f"{DPATH}/cancer_genes_latest.csv.gz", index_col=0).iloc[:, 0]
+cgenes = set(pd.read_csv(f"{DPATH}/cancer_genes_latest.csv.gz")["gene_symbol"])
 
 genes = natsorted(
     list(set.intersection(set(prot.index), set(gexp.index), set(crispr.index)))
@@ -126,6 +122,7 @@ def df_correlation(df_matrix, min_obs=15):
     df["fdr"] = multipletests(df["pvalue"], method="fdr_bh")[1]
 
     return df
+
 
 samples_overlap = list(set.intersection(set(prot), set(gexp), set(crispr)))
 LOG.info(f"Overlapping Samples = {len(samples_overlap)}")
@@ -176,11 +173,8 @@ df_corr["nobs"] = [
 ]
 
 # Cancer genes
-df_corr["protein1_cgene"] = df_corr["protein1"].isin(set(cgenes.index)).astype(int)
-df_corr["protein1_cgene_type"] = cgenes.reindex(df_corr["protein1"]).values
-
-df_corr["protein2_cgene"] = df_corr["protein2"].isin(set(cgenes.index)).astype(int)
-df_corr["protein2_cgene_type"] = cgenes.reindex(df_corr["protein2"]).values
+df_corr["protein1_cgene"] = df_corr["protein1"].isin(cgenes).astype(int)
+df_corr["protein2_cgene"] = df_corr["protein2"].isin(cgenes).astype(int)
 
 # Merged score
 df_corr["merged_pvalue"] = df_corr[
@@ -408,7 +402,7 @@ pal = pd.Series(
     sns.color_palette("Blues_d", n_colors=len(order)).as_hex(), index=order
 )
 
-_, axs = plt.subplots(1, len(dsets), figsize=(2 * len(dsets), 2), dpi=600)
+_, axs = plt.subplots(1, len(dsets), figsize=(3 * len(dsets), 2), dpi=600)
 
 for i, dt in enumerate(dsets):
     ax = axs[i]

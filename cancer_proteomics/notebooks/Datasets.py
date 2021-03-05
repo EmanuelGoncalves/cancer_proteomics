@@ -74,11 +74,11 @@ wes = DataImport.read_wes()
 samples = set(cmp["model_id"])
 
 datasets = [
+    ("Proteomics (CMRI&Sanger)", set(prot)),
     ("Methylation", set(methy)),
     ("Mutation", set(wes["model_id"])),
     ("Copy number", set(cnv)),
     ("Transcriptomics", set(gexp)),
-    ("Proteomics (CMRI&Sanger)", set(prot)),
     ("Proteomics (CCLE)", set(prot_broad)),
     ("Drug response (Sanger)", set(drespo)),
     ("Drug response (CTD2)", set(ctd2)),
@@ -90,6 +90,21 @@ plot_df = pd.DataFrame({n: {s: s in dsamples for s in samples} for n, dsamples i
 plot_df = plot_df[plot_df.sum().sort_values(ascending=False).index]
 plot_df = plot_df.loc[:, plot_df.sum() > 0]
 plot_df = plot_df.loc[plot_df.sum(1).sort_values(ascending=False).index]
+
+plot_df = plot_df.loc[[
+    'Proteomics (CMRI&Sanger)',
+    'Transcriptomics',
+    'Drug response (Sanger)',
+    'Mutation',
+    'Copy number',
+    'Methylation',
+    'Drug response (CTD2)',
+    'Gene essentiality (Broad&Sanger)',
+    'Drug response (PRISM)',
+    'Proteomics (CCLE)',
+]]
+
+plot_df.T.to_csv(f"{RPATH}/Datasets_overlap.csv")
 
 nsamples = plot_df.sum(1)
 

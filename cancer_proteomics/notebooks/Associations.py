@@ -51,7 +51,7 @@ gexp = DataImport.read_gene_matrix()
 
 # Read CRISPR
 crispr = DataImport.read_crispr_matrix()
-crispr_institute = DataImport.read_crispr_institute()
+crispr_institute = DataImport.read_crispr_institute()[crispr.columns]
 crispr_skew = crispr.apply(skew, axis=1, nan_policy="omit").astype(float)
 
 # Read Drug-response
@@ -84,7 +84,7 @@ covs_drug = (
             drespo.mean().rename("MeanIC50"),
             ss["growth_properties"].str.get_dummies(),
             ss[["replicates_correlation", "growth", "ploidy"]],
-            ss["tissue"].str.get_dummies()["Haematopoietic and Lymphoid"],
+            ss["Tissue_type"].str.get_dummies()["Haematopoietic and Lymphoid"],
         ],
         axis=1,
     )
@@ -146,7 +146,7 @@ covs_crispr = (
             crispr_institute.str.get_dummies(),
             ss["growth_properties"].str.get_dummies(),
             ss[["replicates_correlation", "growth", "ploidy"]],
-            ss["tissue"].str.get_dummies()["Haematopoietic and Lymphoid"],
+            ss["Tissue_type"].str.get_dummies()["Haematopoietic and Lymphoid"],
         ],
         axis=1,
     )

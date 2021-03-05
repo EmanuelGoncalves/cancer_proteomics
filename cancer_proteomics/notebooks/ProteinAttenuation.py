@@ -64,7 +64,8 @@ LOG.info(f"Genes: {len(genes)}; Samples: {len(samples)}")
 # Spearman's rho
 pg_corr = pd.DataFrame(
     [two_vars_correlation(prot.loc[g], gexp.loc[g], method="spearman") for g in genes]
-).sort_values("pval")
+).assign(protein=genes)
+pg_corr = pg_corr.sort_values("pval").dropna()
 pg_corr["fdr"] = multipletests(pg_corr["pval"], method="fdr_bh")[1]
 pg_corr.to_csv(
     f"{TPATH}/ProteinAttenuation_correlations.csv.gz", index=False, compression="gzip"

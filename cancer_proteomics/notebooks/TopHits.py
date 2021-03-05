@@ -23,23 +23,13 @@ import numpy as np
 import pandas as pd
 import pkg_resources
 import seaborn as sns
-import numpy.ma as ma
-import itertools as it
 import matplotlib.pyplot as plt
-from natsort import natsorted
 from crispy.GIPlot import GIPlot
-from scipy.stats import pearsonr, spearmanr
 from adjustText import adjust_text
 from matplotlib_venn import venn2, venn2_circles
-from sklearn.metrics.ranking import auc
-from crispy.Enrichment import Enrichment
 from crispy.CrispyPlot import CrispyPlot
-from sklearn.mixture import GaussianMixture
 from sklearn.preprocessing import StandardScaler
-from statsmodels.stats.multitest import multipletests
-from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-from cancer_proteomics.notebooks import DataImport, two_vars_correlation
-from crispy.DataImporter import CORUM, BioGRID, PPI, HuRI
+from cancer_proteomics.notebooks import DataImport, two_vars_correlation, PALETTE_TTYPE
 
 
 LOG = logging.getLogger("cancer_proteomics")
@@ -103,7 +93,7 @@ pd.Series(StandardScaler().fit_transform(x)[:, 0]).hist(); plt.show()
 #
 _, ax = plt.subplots(1, 1, figsize=(3, 3), dpi=600)
 
-plot_info = [("crispr", "o", "#009EAC"), ("drug", "X", "#FEC041")]
+plot_info = [("crispr", "o", CrispyPlot.PAL_DTRACE[2]), ("drug", "X", "#FEC041")]
 for i, (n, m, c) in enumerate(plot_info):
     n_df = dep_df.query(f"dtype == '{n}'")
 
@@ -190,7 +180,7 @@ for y_id in topdep:
     # y_id = "TP63"
     plot_df = (
         tophits_feat.query(f"y_id == '{y_id}'")
-        .head(10)
+        .head(10).sort_values("pval")
         .reset_index(drop=True)
         .reset_index()
     )
@@ -278,14 +268,14 @@ for p, c, dtype, ctissues in gi_pairs:
             else crispr.loc[[c]].T.add_suffix("_y"),
             prot.loc[[p]].T.add_suffix("_prot"),
             gexp.loc[[p]].T.add_suffix("_gexp"),
-            ss["tissue"],
+            ss["Tissue_type"],
         ],
         axis=1,
         sort=False,
     ).dropna(subset=[f"{c}_y", f"{p}_prot"])
 
     # Protein
-    ax = GIPlot.gi_tissue_plot(f"{p}_prot", f"{c}_y", plot_df)
+    ax = GIPlot.gi_tissue_plot(f"{p}_prot", f"{c}_y", plot_df, pal=PALETTE_TTYPE)
 
     if dtype == "drug":
         ax.axhline(np.log(dmaxc[c]), ls="--", lw=0.3, color=CrispyPlot.PAL_DTRACE[1])
@@ -307,7 +297,7 @@ for p, c, dtype, ctissues in gi_pairs:
     # Protein
     if ctissues is not None:
         ax = GIPlot.gi_tissue_plot(
-            f"{p}_prot", f"{c}_y", plot_df[plot_df["tissue"].isin(ctissues)]
+            f"{p}_prot", f"{c}_y", plot_df[plot_df["Tissue_type"].isin(ctissues)], pal=PALETTE_TTYPE
         )
 
         if dtype == "drug":
@@ -330,7 +320,7 @@ for p, c, dtype, ctissues in gi_pairs:
         plt.close("all")
 
     # Gene expression
-    ax = GIPlot.gi_tissue_plot(f"{p}_gexp", f"{c}_y", plot_df)
+    ax = GIPlot.gi_tissue_plot(f"{p}_gexp", f"{c}_y", plot_df, pal=PALETTE_TTYPE)
 
     if dtype == "drug":
         ax.axhline(np.log(dmaxc[c]), ls="--", lw=0.3, color=CrispyPlot.PAL_DTRACE[1])

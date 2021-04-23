@@ -236,6 +236,8 @@ for n in ["prot", "gexp", "crispr"]:
 # ### Define novel PPIs
 novel_ppis = df_corr.query(f"(prot_fdr < .05) & (prot_corr > 0.5)")
 
+df_corr[(df_corr["prot_corr"].abs() > .5) & (df_corr["prot_fdr"] < .05)].sort_values(["prot_pvalue", "prot_corr"], ascending=[True, False]).to_clipboard(index=False)
+
 # Export
 ppis = df_corr[
     (df_corr["prot_corr"].abs() > .5) | (df_corr["gexp_corr"].abs() > .5) | (df_corr["crispr_corr"].abs() > .5)

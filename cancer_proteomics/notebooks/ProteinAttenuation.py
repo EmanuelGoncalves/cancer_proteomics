@@ -173,6 +173,7 @@ patt_corr["cluster"] = [
 ]
 
 patt_corr.to_csv(f"{TPATH}/ProteinAttenuation_attenuation.csv.gz", compression="gzip")
+# patt_corr = pd.read_csv(f"{TPATH}/ProteinAttenuation_attenuation.csv.gz", index_col=0)
 
 # Scatter
 g = CrispyPlot.attenuation_scatter("gexp_corr", "prot_corr", patt_corr)

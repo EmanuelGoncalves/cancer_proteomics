@@ -70,12 +70,15 @@ ppis = pd.read_csv(f"{TPATH}/PPInteractions.csv.gz")
 lm_drug = pd.read_csv(f"{TPATH}/lm_sklearn_degr_drug_annotated.csv.gz")
 lm_crispr = pd.read_csv(f"{TPATH}/lm_sklearn_degr_crispr_annotated.csv.gz")
 
+x = lm_drug.sort_values(["r2", "pval"], ascending=[False, True]).groupby("y_id").first()
+x.query("fdr > 0.05").sort_values("r2", ascending=False).head(60)
 
 #
 #
 for dtype, lm_df in [("Drug-Protein", lm_drug), ("CRISPR-Protein", lm_crispr)]:
     for pvar in ["nc_pval", "pval"]:
-        _, ax = plt.subplots(1, 1, figsize=(3, 3), dpi=600)
+        # dtype, lm_df, pvar = "Drug-Protein", lm_drug, "nc_pval"
+        # _, ax = plt.subplots(1, 1, figsize=(3, 3), dpi=600)
 
         plot_df = []
         for n in PPI_ORDER:
@@ -91,15 +94,29 @@ for dtype, lm_df in [("Drug-Protein", lm_drug), ("CRISPR-Protein", lm_crispr)]:
 
             plot_df.append(pd.DataFrame({"qnull": x_var, "qemp": y_var, "lambda": l_var, "target": n}))
 
+        plt.close("all")
+
         plot_df = pd.concat(plot_df)
+        v_lambda = plot_df.groupby("target")["lambda"].first()
 
-        ax.grid(True, ls="-", lw=0.1, alpha=1.0, zorder=0, axis="both")
-        ax.set_title(f"{dtype} linear regression")
+        _, ax = plt.subplots(1, 1, figsize=(2, 2), dpi=600)
 
-        plt.legend(frameon=False, title="STRING").get_title().set_fontsize("4")
+        for t in CrispyPlot.PPI_ORDER:
+            df = plot_df.query(f"target == '{t}'")
+            ax.scatter(df["qnull"], df["qemp"], c=CrispyPlot.PPI_PAL[t], label=f"{t} ($\lambda$={v_lambda[t]:.2f})",
+                       s=4)
 
-        plt.savefig(f"{RPATH}/Phenotype_qqplot_{dtype}_{pvar}.pdf", bbox_inches="tight")
-        plt.savefig(
-            f"{RPATH}/Phenotype_qqplot_{dtype}_{pvar}.png", bbox_inches="tight", dpi=600
-        )
+        ax.grid(True, ls=":", lw=0.1, alpha=1.0, zorder=0)
+
+        lims = [0, 8]
+        ax.plot(lims, lims, "k-", lw=0.3, zorder=0)
+
+        ax.legend(prop={"size": 5}, frameon=False, title="", loc=2)
+
+        ax.set_xlabel("P-value expected (-log10)")
+        ax.set_ylabel("P-value observed (-log10)")
+        ax.set_title("CRISPR-Protein associations")
+
+        plt.savefig(f"{RPATH}/LM_qqplot_{dtype}_{pvar}.pdf", bbox_inches="tight")
+        plt.savefig(f"{RPATH}/LM_qqplot_{dtype}_{pvar}.png", bbox_inches="tight", dpi=600)
         plt.close("all")

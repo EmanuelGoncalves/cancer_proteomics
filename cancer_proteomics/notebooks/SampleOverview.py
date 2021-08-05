@@ -30,7 +30,6 @@ from natsort import natsorted
 from crispy.GIPlot import GIPlot
 from adjustText import adjust_text
 from crispy.MOFA import MOFA, MOFAPlot
-from sklearn.metrics.ranking import auc
 from crispy.Enrichment import Enrichment
 from crispy.CrispyPlot import CrispyPlot
 from scipy.stats import pearsonr, spearmanr
@@ -45,7 +44,7 @@ LOG = logging.getLogger("cancer_proteomics")
 DPATH = pkg_resources.resource_filename("data", "/")
 PPIPATH = pkg_resources.resource_filename("data", "ppi/")
 TPATH = pkg_resources.resource_filename("tables", "/")
-RPATH = pkg_resources.resource_filename("cancer_proteomics", "plots/")
+RPATH = pkg_resources.resource_filename("cancer_proteomics", "plots/DIANN/")
 
 
 # ### Imports
@@ -53,11 +52,11 @@ RPATH = pkg_resources.resource_filename("cancer_proteomics", "plots/")
 # Read samplesheet
 ss = DataImport.read_samplesheet()
 
-plot_df = ss.sort_values(["tissue", "replicates_correlation"])
-plot_df.tissue = plot_df.tissue.astype("category")
-plot_df.tissue.cat.set_categories(ss["tissue"].value_counts().index, inplace=True)
+plot_df = ss.sort_values(["Tissue_type", "replicates_correlation"])
+plot_df.Tissue_type = plot_df.Tissue_type.astype("category")
+plot_df.Tissue_type.cat.set_categories(ss["Tissue_type"].value_counts().index, inplace=True)
 plot_df = plot_df.sort_values(
-    ["tissue", "replicates_correlation"], ascending=[True, False]
+    ["Tissue_type", "replicates_correlation"], ascending=[True, False]
 ).reset_index()
 
 theta = np.linspace(0.0, 2 * np.pi, plot_df.shape[0], endpoint=False)
@@ -65,7 +64,7 @@ width = (2 * np.pi) / plot_df.shape[0]
 
 fig, ax = plt.subplots(1, 1, figsize=(3, 3), dpi=600, subplot_kw=dict(polar=True))
 
-for t, df_t in plot_df.groupby("tissue"):
+for t, df_t in plot_df.groupby("Tissue_type"):
     ax.bar(
         theta[df_t.index],
         df_t["replicates_correlation"],

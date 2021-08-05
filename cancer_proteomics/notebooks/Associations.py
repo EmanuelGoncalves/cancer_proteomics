@@ -44,7 +44,7 @@ ppi = PPI(ddir=PPIPATH).build_string_ppi(score_thres=900)
 ss = DataImport.read_samplesheet()
 
 # Read proteomics (Proteins x Cell lines)
-prot = DataImport.read_protein_matrix(map_protein=True, min_measurements=300)
+prot = DataImport.read_protein_matrix(map_protein=True)
 
 # Read Transcriptomics
 gexp = DataImport.read_gene_matrix()
@@ -55,7 +55,7 @@ crispr_institute = DataImport.read_crispr_institute()[crispr.columns]
 crispr_skew = crispr.apply(skew, axis=1, nan_policy="omit").astype(float)
 
 # Read Drug-response
-drespo = DataImport.read_drug_response(min_measurements=300)
+drespo = DataImport.read_drug_response()
 dtargets = DataImport.read_drug_target()
 drespo_skew = drespo.apply(skew, axis=1, nan_policy="omit").astype(float)
 
@@ -104,6 +104,7 @@ samples = set.intersection(
 lm_prot_drug = LModel(
     Y=Y.loc[samples], X=X.loc[samples, features], M=M_without_gexp.loc[samples]
 ).fit_matrix()
+lm_prot_drug = lm_prot_drug.query("n > 60")
 lm_prot_drug = LMModels.multipletests(lm_prot_drug).sort_values("fdr")
 
 # Associations with gene expression as covariate
@@ -113,15 +114,14 @@ lm_prot_drug_gexp = LModel(
     M=M_with_gexp.loc[samples],
     M2=M2.loc[samples, features],
 ).fit_matrix()
+lm_prot_drug_gexp = lm_prot_drug_gexp.query("n > 60")
 lm_prot_drug_gexp = LMModels.multipletests(lm_prot_drug_gexp).sort_values("fdr")
 
 # Merge associations
 lm_drug = pd.concat(
     [
         lm_prot_drug_gexp.set_index(["y_id", "x_id"]),
-        lm_prot_drug.set_index(["y_id", "x_id"])[
-            ["beta", "lr", "pval", "fdr"]
-        ].add_prefix("nc_"),
+        lm_prot_drug.set_index(["y_id", "x_id"])[["beta", "lr", "pval", "fdr"]].add_prefix("nc_"),
     ],
     axis=1,
 ).reset_index()
@@ -132,7 +132,7 @@ lm_drug = DataImport.lm_ppi_annotate_table(
 )
 lm_drug = lm_drug.sort_values("fdr")
 lm_drug.to_csv(
-    f"{TPATH}/lm_sklearn_degr_drug_annotated.csv.gz", compression="gzip", index=False
+    f"{TPATH}/lm_sklearn_degr_drug_annotated_DIANN.csv.gz", compression="gzip", index=False
 )
 
 # ## CRISPR
@@ -166,6 +166,8 @@ samples = set.intersection(
 lm_prot_crispr = LModel(
     Y=Y.loc[samples], X=X.loc[samples, features], M=M_without_gexp.loc[samples]
 ).fit_matrix()
+lm_prot_crispr = lm_prot_crispr.query("n > 60")
+lm_prot_crispr = LMModels.multipletests(lm_prot_crispr).sort_values("fdr")
 
 # Associations with gene expression as covariate
 lm_prot_crispr_gexp = LModel(
@@ -174,6 +176,8 @@ lm_prot_crispr_gexp = LModel(
     M=M_with_gexp.loc[samples],
     M2=M2.loc[samples, features],
 ).fit_matrix()
+lm_prot_crispr_gexp = lm_prot_crispr_gexp.query("n > 60")
+lm_prot_crispr_gexp = LMModels.multipletests(lm_prot_crispr_gexp).sort_values("fdr")
 
 # Merge associations
 lm_crispr = pd.concat(
@@ -190,5 +194,5 @@ lm_crispr = pd.concat(
 lm_crispr = DataImport.lm_ppi_annotate_table(lm_crispr, ppi, crispr_skew)
 lm_crispr = lm_crispr.sort_values("fdr")
 lm_crispr.to_csv(
-    f"{TPATH}/lm_sklearn_degr_crispr_annotated.csv.gz", compression="gzip", index=False
+    f"{TPATH}/lm_sklearn_degr_crispr_annotated_DIANN.csv.gz", compression="gzip", index=False
 )

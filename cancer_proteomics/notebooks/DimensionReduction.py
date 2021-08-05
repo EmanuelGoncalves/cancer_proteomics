@@ -30,14 +30,13 @@ from crispy.GIPlot import GIPlot
 from crispy.Enrichment import Enrichment
 from crispy.CrispyPlot import CrispyPlot
 from scipy.stats import spearmanr
-
-from cancer_proteomics.notebooks import DataImport, DimReduction, two_vars_correlation
+from cancer_proteomics.notebooks import DataImport, DimReduction, two_vars_correlation, PALETTE_TTYPE
 
 
 LOG = logging.getLogger("cancer_proteomics")
 DPATH = pkg_resources.resource_filename("data", "/")
 TPATH = pkg_resources.resource_filename("tables", "/")
-RPATH = pkg_resources.resource_filename("cancer_proteomics", "plots/")
+RPATH = pkg_resources.resource_filename("cancer_proteomics", "plots/DIANN/")
 
 
 # ### Imports
@@ -99,7 +98,7 @@ prot_broad_dimred = DimReduction.dim_reduction(prot_broad)
 fig, ax = plt.subplots(figsize=(3.0, 3.0), dpi=600)
 
 DimReduction.plot_dim_reduction(
-    prot_dimred, ctype="tsne", hue_by=ss["tissue"], palette=CrispyPlot.PAL_TISSUE, ax=ax
+    prot_dimred, ctype="tsne", hue_by=ss["Tissue_type"], palette=PALETTE_TTYPE, ax=ax
 )
 
 plt.savefig(f"{RPATH}/DimensionReduction_Proteomics_tSNE.pdf", bbox_inches="tight")
@@ -135,7 +134,7 @@ enr_pcs = pd.concat(
 )
 enr_pcs = enr_pcs.rename(columns={"sample1": "nes"}).sort_values("nes")
 enr_pcs.to_csv(
-    f"{TPATH}/DimensionReduction_pcs_enr.csv.gz", compression="gzip", index=False
+    f"{TPATH}/DimensionReduction_pcs_enr_DIANN.csv.gz", compression="gzip", index=False
 )
 
 # Plot
@@ -236,7 +235,7 @@ covariates = pd.concat(
         gexp.loc[["CDH1", "VIM"]].T.add_suffix("_gexp"),
         pd.get_dummies(ss["media"]),
         pd.get_dummies(ss["growth_properties"]),
-        pd.get_dummies(ss["tissue"])[["Haematopoietic and Lymphoid", "Lung"]],
+        pd.get_dummies(ss["Tissue_type"])[["Haematopoietic and Lymphoid", "Lung"]],
         ss[["ploidy", "mutational_burden", "growth", "size"]],
         ss["replicates_correlation"].rename("RepsCorrelation"),
     ],

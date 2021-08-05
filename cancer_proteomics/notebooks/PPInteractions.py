@@ -46,7 +46,7 @@ LOG = logging.getLogger("cancer_proteomics")
 DPATH = pkg_resources.resource_filename("data", "/")
 PPIPATH = pkg_resources.resource_filename("data", "ppi/")
 TPATH = pkg_resources.resource_filename("tables", "/")
-RPATH = pkg_resources.resource_filename("cancer_proteomics", "plots/")
+RPATH = pkg_resources.resource_filename("cancer_proteomics", "plots/DIANN/")
 
 
 # ### Imports
@@ -182,7 +182,7 @@ df_corr["merged_pvalue"] = df_corr[
 ].prod(1)
 
 # Export
-df_corr.to_csv(f"{TPATH}/PPInteractions.csv.gz", compression="gzip", index=False)
+df_corr.to_csv(f"{TPATH}/PPInteractions_DIANN.csv.gz", compression="gzip", index=False)
 # df_corr = pd.read_csv(f"{TPATH}/PPInteractions.csv.gz")
 
 #
@@ -242,7 +242,7 @@ df_corr[(df_corr["prot_corr"].abs() > .5) & (df_corr["prot_fdr"] < .05)].sort_va
 ppis = df_corr[
     (df_corr["prot_corr"].abs() > .5) | (df_corr["gexp_corr"].abs() > .5) | (df_corr["crispr_corr"].abs() > .5)
     ]
-ppis.round(4).to_csv(f"{TPATH}/PPInteractions_filtered.csv", index=False)
+ppis.round(4).to_csv(f"{TPATH}/PPInteractions_filtered_DIANN.csv", index=False)
 
 
 #

@@ -36,7 +36,7 @@ from cancer_proteomics.notebooks import DataImport, two_vars_correlation
 LOG = logging.getLogger("cancer_proteomics")
 DPATH = pkg_resources.resource_filename("data", "/")
 TPATH = pkg_resources.resource_filename("tables", "/")
-RPATH = pkg_resources.resource_filename("cancer_proteomics", "plots/")
+RPATH = pkg_resources.resource_filename("cancer_proteomics", "plots/DIANN/")
 
 
 # ### Imports
@@ -68,7 +68,7 @@ pg_corr = pd.DataFrame(
 pg_corr = pg_corr.sort_values("pval").dropna()
 pg_corr["fdr"] = multipletests(pg_corr["pval"], method="fdr_bh")[1]
 pg_corr.to_csv(
-    f"{TPATH}/ProteinAttenuation_correlations.csv.gz", index=False, compression="gzip"
+    f"{TPATH}/ProteinAttenuation_correlations_DIANN.csv.gz", index=False, compression="gzip"
 )
 
 # Histogram
@@ -102,7 +102,7 @@ pg_corr_tissue = pd.DataFrame(
         }
         for t, t_samples in ss.reindex(samples)
         .reset_index()
-        .groupby("tissue")["model_id"]
+        .groupby("Tissue_type")["model_id"]
         if len(t_samples) > 15
         for g in genes
     ]
@@ -110,7 +110,7 @@ pg_corr_tissue = pd.DataFrame(
 pg_corr_tissue = pg_corr_tissue.query("len > 15")
 pg_corr_tissue["fdr"] = multipletests(pg_corr_tissue["pval"], method="fdr_bh")[1]
 pg_corr_tissue.to_csv(
-    f"{TPATH}/ProteinAttenuation_correlations_tissue.csv.gz",
+    f"{TPATH}/ProteinAttenuation_correlations_tissue_DIANN.csv.gz",
     index=False,
     compression="gzip",
 )
@@ -159,7 +159,7 @@ patt_corr = pd.DataFrame(
         )
         for g in genes
     }
-).T.sort_values("gexp_pval")
+).T.sort_values("gexp_pval").dropna()
 patt_corr = patt_corr.query("(prot_len > 15) & (gexp_len > 15)")
 patt_corr["attenuation"] = patt_corr["gexp_corr"] - patt_corr["prot_corr"]
 
@@ -172,7 +172,7 @@ patt_corr["cluster"] = [
     "High" if s_type[p] == clusters.argmax() else "Low" for p in patt_corr.index
 ]
 
-patt_corr.to_csv(f"{TPATH}/ProteinAttenuation_attenuation.csv.gz", compression="gzip")
+patt_corr.to_csv(f"{TPATH}/ProteinAttenuation_attenuation_DIANN.csv.gz", compression="gzip")
 # patt_corr = pd.read_csv(f"{TPATH}/ProteinAttenuation_attenuation.csv.gz", index_col=0)
 
 # Scatter

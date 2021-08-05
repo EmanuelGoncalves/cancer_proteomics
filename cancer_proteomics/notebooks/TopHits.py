@@ -28,15 +28,14 @@ from crispy.GIPlot import GIPlot
 from adjustText import adjust_text
 from matplotlib_venn import venn2, venn2_circles
 from crispy.CrispyPlot import CrispyPlot
-from sklearn.preprocessing import StandardScaler
-from cancer_proteomics.notebooks import DataImport, two_vars_correlation, PALETTE_TTYPE
+from cancer_proteomics.notebooks import DataImport, PALETTE_TTYPE
 
 
 LOG = logging.getLogger("cancer_proteomics")
 DPATH = pkg_resources.resource_filename("data", "/")
 PPIPATH = pkg_resources.resource_filename("data", "ppi/")
 TPATH = pkg_resources.resource_filename("tables", "/")
-RPATH = pkg_resources.resource_filename("cancer_proteomics", "plots/")
+RPATH = pkg_resources.resource_filename("cancer_proteomics", "plots/DIANN/")
 
 
 # ### Imports
@@ -62,9 +61,8 @@ dmaxc = dmaxc.reindex(drespo.index)
 
 # LM associations
 #
-lm_drug = pd.read_csv(f"{TPATH}/lm_sklearn_degr_drug_annotated.csv.gz")
-lm_crispr = pd.read_csv(f"{TPATH}/lm_sklearn_degr_crispr_annotated.csv.gz")
-
+lm_drug = pd.read_csv(f"{TPATH}/lm_sklearn_degr_drug_annotated_DIANN.csv.gz")
+lm_crispr = pd.read_csv(f"{TPATH}/lm_sklearn_degr_crispr_annotated_DIANN.csv.gz")
 
 # Selective and predictive dependencies
 #
@@ -87,8 +85,6 @@ dep_df = pd.concat(
 
 x = dep_df.query("dtype == 'drug'")[["r2"]]
 
-pd.Series(StandardScaler().fit_transform(x)[:, 0]).hist(); plt.show()
-
 # Selectivity plot
 #
 _, ax = plt.subplots(1, 1, figsize=(3, 3), dpi=600)
@@ -107,6 +103,8 @@ for i, (n, m, c) in enumerate(plot_info):
     n_ax.set_ylabel("R2")
 
     labels = n_df.query(f"r2 > {R2_THRES}").sort_values("skew").head(20)
+    labels = labels.append(n_df.query(f"skew < -5").sort_values("skew").head(20)).drop_duplicates()
+
     labels = [
         n_ax.text(
             row["skew"],
@@ -124,6 +122,7 @@ for i, (n, m, c) in enumerate(plot_info):
 
 ax.grid(axis="y", lw=0.1, color="#e1e1e1", zorder=0)
 ax.axhline(R2_THRES, c="#E3213D", lw=0.3, ls="--")
+ax.axvline(-5, c="#E3213D", lw=0.3, ls="--")
 
 plt.savefig(f"{RPATH}/TopHits_selectivity_predictive_scatter.pdf", bbox_inches="tight")
 plt.savefig(f"{RPATH}/TopHits_selectivity_predictive_scatter.png", bbox_inches="tight")
@@ -179,7 +178,7 @@ topdep = ["FOXA1"]
 for y_id in topdep:
     # y_id = "TP63"
     plot_df = (
-        tophits_feat.query(f"y_id == '{y_id}'")
+        tophits_feat.query(f"y_id == '{y_id}'").query("n > 60")
         .head(10).sort_values("pval")
         .reset_index(drop=True)
         .reset_index()
@@ -275,7 +274,7 @@ for p, c, dtype, ctissues in gi_pairs:
     ).dropna(subset=[f"{c}_y", f"{p}_prot"])
 
     # Protein
-    ax = GIPlot.gi_tissue_plot(f"{p}_prot", f"{c}_y", plot_df, pal=PALETTE_TTYPE)
+    ax = GIPlot.gi_tissue_plot(f"{p}_prot", f"{c}_y", plot_df, pal=PALETTE_TTYPE, hue="Tissue_type")
 
     if dtype == "drug":
         ax.axhline(np.log(dmaxc[c]), ls="--", lw=0.3, color=CrispyPlot.PAL_DTRACE[1])
@@ -297,7 +296,7 @@ for p, c, dtype, ctissues in gi_pairs:
     # Protein
     if ctissues is not None:
         ax = GIPlot.gi_tissue_plot(
-            f"{p}_prot", f"{c}_y", plot_df[plot_df["Tissue_type"].isin(ctissues)], pal=PALETTE_TTYPE
+            f"{p}_prot", f"{c}_y", plot_df[plot_df["Tissue_type"].isin(ctissues)], pal=PALETTE_TTYPE, hue="Tissue_type"
         )
 
         if dtype == "drug":
@@ -320,7 +319,7 @@ for p, c, dtype, ctissues in gi_pairs:
         plt.close("all")
 
     # Gene expression
-    ax = GIPlot.gi_tissue_plot(f"{p}_gexp", f"{c}_y", plot_df, pal=PALETTE_TTYPE)
+    ax = GIPlot.gi_tissue_plot(f"{p}_gexp", f"{c}_y", plot_df, pal=PALETTE_TTYPE, hue="Tissue_type")
 
     if dtype == "drug":
         ax.axhline(np.log(dmaxc[c]), ls="--", lw=0.3, color=CrispyPlot.PAL_DTRACE[1])

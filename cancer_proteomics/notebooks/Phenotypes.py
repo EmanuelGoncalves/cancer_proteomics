@@ -46,7 +46,7 @@ LOG = logging.getLogger("cancer_proteomics")
 DPATH = pkg_resources.resource_filename("data", "/")
 PPIPATH = pkg_resources.resource_filename("data", "ppi/")
 TPATH = pkg_resources.resource_filename("tables", "/")
-RPATH = pkg_resources.resource_filename("cancer_proteomics", "plots/")
+RPATH = pkg_resources.resource_filename("cancer_proteomics", "plots/DIANN/")
 
 
 # ### Imports
@@ -67,15 +67,15 @@ crispr = DataImport.read_crispr_matrix()
 ppis = pd.read_csv(f"{TPATH}/PPInteractions.csv.gz")
 
 # Hits
-lm_drug = pd.read_csv(f"{TPATH}/lm_sklearn_degr_drug_annotated.csv.gz")
-lm_crispr = pd.read_csv(f"{TPATH}/lm_sklearn_degr_crispr_annotated.csv.gz")
-
-x = lm_drug.sort_values(["r2", "pval"], ascending=[False, True]).groupby("y_id").first()
-x.query("fdr > 0.05").sort_values("r2", ascending=False).head(60)
+lm_drug = pd.read_csv(f"{TPATH}/lm_sklearn_degr_drug_annotated_DIANN.csv.gz")
+lm_crispr = pd.read_csv(f"{TPATH}/lm_sklearn_degr_crispr_annotated_DIANN.csv.gz")
 
 #
 #
-for dtype, lm_df in [("Drug-Protein", lm_drug), ("CRISPR-Protein", lm_crispr)]:
+for dtype, lm_df in [
+    ("Drug-Protein", lm_drug.query("n > 60")),
+    ("CRISPR-Protein", lm_crispr.query("n > 60"))
+]:
     for pvar in ["nc_pval", "pval"]:
         # dtype, lm_df, pvar = "Drug-Protein", lm_drug, "nc_pval"
         # _, ax = plt.subplots(1, 1, figsize=(3, 3), dpi=600)

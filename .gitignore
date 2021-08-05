@@ -144,3 +144,7 @@ reports/eg/lmm_protein_crispr/**/*data*
 **/*results*
 **/.*
 **/*work_dir*
+tables/
+ssGSEA_/
+submission/
+reports_test/

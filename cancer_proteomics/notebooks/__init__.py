@@ -142,7 +142,7 @@ PPI_PAL = {
 PPI_ORDER = ["T", "1", "2", "3", "4", "5+", "-"]
 
 
-def two_vars_correlation(var1, var2, idx_set=None, method="pearson", verbose=0):
+def two_vars_correlation(var1, var2, idx_set=None, method="pearson", min_n=15, verbose=0):
     if verbose > 0:
         print(f"Var1={var1.name}; Var2={var2.name}")
 
@@ -153,6 +153,9 @@ def two_vars_correlation(var1, var2, idx_set=None, method="pearson", verbose=0):
         idx_set = set(var1.reindex(idx_set).dropna().index).intersection(
             var2.reindex(idx_set).dropna().index
         )
+
+    if len(idx_set) <= min_n:
+        return dict(corr=np.nan, pval=np.nan, len=len(idx_set))
 
     if method == "spearman":
         r, p = spearmanr(
@@ -172,7 +175,7 @@ class DataImport:
         if drug_targets is not None:
             # Machine learning scores
             ml_scores = pd.read_csv(
-                f"{cls.DPATH}/score_dl_min300_ic50_eg_id.csv", index_col=0
+                f"{cls.DPATH}/score_dl_min300_ic50_eg_id_20210804.csv", index_col=0
             )["corr"]
             table["r2"] = ml_scores.reindex(table["y_id"]).values
 
@@ -190,7 +193,7 @@ class DataImport:
         else:
             # Machine learning scores
             ml_scores = pd.read_csv(
-                f"{cls.DPATH}/score_dl_crispr_protein.csv", index_col=0
+                f"{cls.DPATH}/score_dl_crispr_protein_20210804.csv", index_col=0
             )["corr"]
             table["r2"] = ml_scores.reindex(table["y_id"]).values
 
@@ -244,14 +247,15 @@ class DataImport:
         :return:
         """
         # Read protein level normalised intensities
-        protein = (
-            pd.read_csv(
-                f"{cls.DPATH}/E0022_P06_Protein_Matrix_ProNorM_STR_failed_removed.csv.gz",
-            )
-            .drop(columns=["Cell_line"])
-            .set_index("model_id")
-            .T
-        )
+        protein = pd.read_csv(
+            # f"{cls.DPATH}/E0022_P06_Protein_Matrix_ProNorM_STR_failed_removed.csv.gz",
+            f"{cls.DPATH}/e0022_diann_protein_matrix_pronorm_210721_corrected.txt.gz",
+            sep="\t",
+            index_col=0,
+        ).T
+
+        protein.columns = [c.split(";")[0] for c in protein]
+        protein.index = [c.split(";")[1] for c in protein.index]
 
         exclude_controls = [
             "Control_HEK293T_lys",

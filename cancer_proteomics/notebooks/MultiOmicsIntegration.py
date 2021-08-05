@@ -31,7 +31,7 @@ LOG = logging.getLogger("cancer_proteomics")
 DPATH = pkg_resources.resource_filename("data", "/")
 PPIPATH = pkg_resources.resource_filename("data", "ppi/")
 TPATH = pkg_resources.resource_filename("tables", "/")
-RPATH = pkg_resources.resource_filename("cancer_proteomics", "plots/")
+RPATH = pkg_resources.resource_filename("cancer_proteomics", "plots/DIANN/")
 
 
 # ### Imports
@@ -40,7 +40,7 @@ RPATH = pkg_resources.resource_filename("cancer_proteomics", "plots/")
 ss = DataImport.read_samplesheet()
 
 # Read proteomics (Proteins x Cell lines)
-prot = DataImport.read_protein_matrix(map_protein=True, min_measurements=300)
+prot = DataImport.read_protein_matrix(map_protein=True, min_measurements=30)
 
 # Read proteomics BROAD (Proteins x Cell lines)
 prot_broad = DataImport.read_protein_matrix_broad()
@@ -55,7 +55,7 @@ crispr = DataImport.read_crispr_matrix()
 methy = DataImport.read_methylation_matrix()
 
 # Read Drug-response
-drespo = DataImport.read_drug_response(min_measurements=300)
+drespo = DataImport.read_drug_response(min_measurements=30)
 
 
 # ### Covariates
@@ -100,7 +100,7 @@ mofa = MOFA(
     use_overlap=False,
     convergence_mode="slow",
     factors_n=15,
-    from_file=f"{TPATH}/MultiOmics.hdf5",
+    from_file=f"{TPATH}/MultiOmics_DIANN.hdf5",
     verbose=2,
 )
 
@@ -174,7 +174,7 @@ plot_df = pd.concat(
 )
 
 # Tissue plot
-ax = GIPlot.gi_tissue_plot(f_x, f_y, plot_df, plot_reg=False, pal=PALETTE_TTYPE)
+ax = GIPlot.gi_tissue_plot(f_x, f_y, plot_df, hue="Tissue_type", plot_reg=False, pal=PALETTE_TTYPE)
 ax.set_xlabel(f"Factor {f_x[1:]}")
 ax.set_ylabel(f"Factor {f_y[1:]}")
 plt.savefig(f"{RPATH}/MultiOmics_{f_x}_{f_y}_tissue_plot.pdf", bbox_inches="tight")
@@ -185,7 +185,9 @@ plt.close("all")
 
 # Continous annotation
 for z in ["VIM_proteomics", "CDH1_proteomics"]:
-    ax = GIPlot.gi_continuous_plot(f_x, f_y, z, plot_df, cbar_label=z.replace("_", " "))
+    ax = GIPlot.gi_continuous_plot(
+        f_x, f_y, z, plot_df, cbar_label=z.replace("_", " ")
+    )
     ax.set_xlabel(f"Factor {f_x[1:]}")
     ax.set_ylabel(f"Factor {f_y[1:]}")
     plt.savefig(

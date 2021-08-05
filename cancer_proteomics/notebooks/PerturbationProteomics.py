@@ -31,7 +31,6 @@ from natsort import natsorted
 from crispy.GIPlot import GIPlot
 from adjustText import adjust_text
 from crispy.MOFA import MOFA, MOFAPlot
-from sklearn.metrics.ranking import auc
 from crispy.Enrichment import Enrichment
 from crispy.CrispyPlot import CrispyPlot
 from scipy.stats import pearsonr, spearmanr, ttest_ind

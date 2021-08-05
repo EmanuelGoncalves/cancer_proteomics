@@ -32,14 +32,13 @@ from crispy.DataImporter import PPI
 from sklearn.decomposition import PCA
 from crispy.Enrichment import Enrichment
 from crispy.LMModels import LMModels, LModel
-from cancer_proteomics.notebooks import DataImport
-from scripts.CProtUtils import two_vars_correlation
+from cancer_proteomics.notebooks import DataImport, two_vars_correlation
 
 LOG = logging.getLogger("cancer_proteomics")
 DPATH = pkg_resources.resource_filename("data", "/")
 PPIPATH = pkg_resources.resource_filename("data", "ppi/")
 TPATH = pkg_resources.resource_filename("tables", "/")
-RPATH = pkg_resources.resource_filename("cancer_proteomics", "plots/")
+RPATH = pkg_resources.resource_filename("cancer_proteomics", "plots/DIANN/")
 
 
 # ### Imports

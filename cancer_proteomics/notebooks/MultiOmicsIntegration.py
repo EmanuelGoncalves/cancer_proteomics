@@ -21,6 +21,7 @@
 import logging
 import pandas as pd
 import pkg_resources
+import seaborn as sns
 import matplotlib.pyplot as plt
 from crispy.GIPlot import GIPlot
 from crispy.MOFA import MOFA, MOFAPlot
@@ -201,4 +202,48 @@ for z in ["VIM_proteomics", "CDH1_proteomics"]:
     plt.close("all")
 
 # Export matrix
-plot_df = pd.concat([mofa.rsquare[k].T.add_prefix(f"{k}_").T for k in mofa.rsquare] + [n_factors_corr.T.add_prefix(f"Corr_").T])
+plot_df = pd.concat([mofa.rsquare[k].T.add_prefix(f"{k}_").T for k in mofa.rsquare] + [n_factors_corr.T.add_prefix(f"Corr_").T]).iloc[:, :5]
+
+f, axs = plt.subplots(
+    3,
+    1,
+    sharex="col",
+    sharey="none",
+    gridspec_kw={"height_ratios": [1.5] * 2 + [9]},
+    figsize=(plot_df.shape[1] * 0.25, plot_df.shape[0] * 0.25),
+)
+
+for i, n in enumerate(["Haem", "Other"]):
+    df = plot_df[[i.startswith(n) for i in plot_df.index]]
+    df.index = [i.split("_")[1] for i in df.index]
+    g = sns.heatmap(
+        df,
+        cmap="Blues",
+        annot=True,
+        cbar=False,
+        fmt=".1f",
+        linewidths=0.5,
+        ax=axs[i],
+        vmin=0,
+        annot_kws={"fontsize": 5},
+    )
+    axs[i].set_ylabel(f"{n} cell lines")
+#
+df = plot_df[[i.split("_")[0] not in ["Haem", "Other"] for i in plot_df.index]]
+sns.heatmap(
+    df,
+    cmap="RdYlGn",
+    center=0,
+    annot=True,
+    cbar=False,
+    fmt=".2f",
+    linewidths=0.5,
+    annot_kws={"fontsize": 5},
+    ax=axs[2],
+)
+
+plt.subplots_adjust(hspace=0.025)
+
+plt.savefig(f"{RPATH}/SampleAttenuation_clustermap_merged.pdf", bbox_inches="tight")
+plt.savefig(f"{RPATH}/SampleAttenuation_clustermap_merged.png", bbox_inches="tight", dpi=600)
+plt.close("all")

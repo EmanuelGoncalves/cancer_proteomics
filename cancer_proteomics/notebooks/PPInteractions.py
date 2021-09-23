@@ -185,14 +185,14 @@ df_corr["merged_pvalue"] = df_corr[
 df_corr.to_csv(f"{TPATH}/PPInteractions_DIANN.csv.gz", compression="gzip", index=False)
 # df_corr = pd.read_csv(f"{TPATH}/PPInteractions.csv.gz")
 
-#
+# ECDF
 #
 pal = sns.color_palette("tab10").as_hex()
 
 _, ax = plt.subplots(1, 1, figsize=(2, 1.5), dpi=600)
 
 for i, n in enumerate(["prot", "gexp", "crispr"]):
-    sns.ecdfplot(df_corr.query("nobs > 300")[f"{n}_corr"], color=pal[i], label=f"{n}", ax=ax)
+    sns.ecdfplot(df_corr.query("nobs > 60")[f"{n}_corr"], color=pal[i], label=f"{n}", ax=ax)
     f"{n}={sum(df_corr[f'{n}_corr'].abs() > .5)}"
 
 ax.set_xlabel("Protein-protein correlations\n(Pearson's r)")
@@ -201,15 +201,11 @@ ax.grid(True, axis="both", ls="-", lw=0.1, alpha=1.0, zorder=0)
 
 ax.legend(frameon=False, prop={"size": 6})
 
-plt.savefig(
-    f"{RPATH}/PPInteractions_ecdf_correlations.pdf", bbox_inches="tight"
-)
-plt.savefig(
-    f"{RPATH}/PPInteractions_ecdf_correlations.png", bbox_inches="tight"
-)
+plt.savefig(f"{RPATH}/PPInteractions_ecdf_correlations.pdf", bbox_inches="tight")
+plt.savefig(f"{RPATH}/PPInteractions_ecdf_correlations.png", bbox_inches="tight")
 plt.close("all")
 
-##
+## Generate PPIs
 igraph_nets = {}
 for n in ["prot", "gexp", "crispr"]:
     # Network
@@ -236,16 +232,11 @@ for n in ["prot", "gexp", "crispr"]:
 # ### Define novel PPIs
 novel_ppis = df_corr.query(f"(prot_fdr < .05) & (prot_corr > 0.5)")
 
-df_corr[(df_corr["prot_corr"].abs() > .5) & (df_corr["prot_fdr"] < .05)].sort_values(["prot_pvalue", "prot_corr"], ascending=[True, False]).to_clipboard(index=False)
-
 # Export
-ppis = df_corr[
-    (df_corr["prot_corr"].abs() > .5) | (df_corr["gexp_corr"].abs() > .5) | (df_corr["crispr_corr"].abs() > .5)
-    ]
+ppis = df_corr[(df_corr["prot_corr"].abs() > .5) | (df_corr["gexp_corr"].abs() > .5) | (df_corr["crispr_corr"].abs() > .5)]
 ppis.round(4).to_csv(f"{TPATH}/PPInteractions_filtered_DIANN.csv", index=False)
 
-
-#
+# Plot recall curves
 rc_dict = dict()
 for y in ["corum", "biogrid", "string", "huri"]:
     rc_dict[y] = dict()
@@ -284,12 +275,8 @@ ax.set_ylabel("Cumulative sum")
 ax.set_xlabel("Ranked correlation")
 ax.grid(True, axis="both", ls="-", lw=0.1, alpha=1.0, zorder=0)
 
-plt.savefig(
-    f"{RPATH}/PPInteractions_roc_curves_overlap.pdf", bbox_inches="tight"
-)
-plt.savefig(
-    f"{RPATH}/PPInteractions_roc_curves_overlap.png", bbox_inches="tight"
-)
+plt.savefig(f"{RPATH}/PPInteractions_roc_curves_overlap.pdf", bbox_inches="tight")
+plt.savefig(f"{RPATH}/PPInteractions_roc_curves_overlap.png", bbox_inches="tight")
 plt.close("all")
 
 # Recall barplot
@@ -301,7 +288,14 @@ plot_df = pd.DataFrame(
     ]
 )
 
-hue_order = ["corum", "biogrid", "string", "huri"]
+hue_order = ["CORUM", "BioGRID", "STRING", "HuRI"]
+
+plot_df = plot_df.replace(
+    dict(
+        ppi=dict(corum="CORUM", biogrid="BioGRID", string="STRING", huri="HuRI"),
+        dtype=dict(prot="Proteomics", gexp="Transcriptomics", crispr="CRISPR-Cas9", merged="Merged"),
+    )
+)
 
 _, ax = plt.subplots(1, 1, figsize=(3, 1.5), dpi=600)
 
@@ -313,7 +307,7 @@ sns.barplot(
     orient="h",
     linewidth=0.0,
     saturation=1.0,
-    palette="Blues_d",
+    palette="tab10",
     ax=ax,
 )
 
@@ -329,12 +323,8 @@ ax.legend(
     title="Data-set",
 ).get_title().set_fontsize("5")
 
-plt.savefig(
-    f"{RPATH}/PPInteractions_roc_barplot_overlap.pdf", bbox_inches="tight"
-)
-plt.savefig(
-    f"{RPATH}/PPInteractions_roc_barplot_overlap.png", bbox_inches="tight"
-)
+plt.savefig(f"{RPATH}/PPInteractions_roc_barplot_overlap.pdf", bbox_inches="tight")
+plt.savefig(f"{RPATH}/PPInteractions_roc_barplot_overlap.png", bbox_inches="tight")
 plt.close("all")
 
 # PPI types
@@ -357,54 +347,13 @@ df_corr_ppi = pd.concat(
     axis=1,
 ).sort_values("crispr", ascending=False)
 
-for dt in ["gexp", "prot"]:
-    fig, ax = plt.subplots(1, 1, figsize=(2, 2), dpi=600)
-
-    hb = ax.hexbin(
-        x=df_corr_ppi[dt],
-        y=df_corr_ppi["ppi"],
-        C=df_corr_ppi["crispr"],
-        reduce_C_function=np.mean,
-        cmap="Spectral",
-        gridsize=50,
-        lw=0,
-    )
-
-    cor, pval = spearmanr(df_corr_ppi[dt], df_corr_ppi["ppi"])
-    annot_text = f"R={cor:.2g}, p={pval:.1e}"
-    ax.text(0.95, 0.05, annot_text, fontsize=6, transform=ax.transAxes, ha="right")
-
-    axins1 = inset_axes(ax, width="30%", height="5%", loc="upper left")
-    cb = fig.colorbar(hb, cax=axins1, orientation="horizontal")
-    cb.ax.tick_params(labelsize=4)
-    cb.ax.set_title("CRISPR\n(mean scaled FC)", fontsize=4)
-
-    ax.set_xlabel(
-        "Gene expression (mean voom)"
-        if dt == "gexp"
-        else "Protein abundance (mean intensities)"
-    )
-    ax.set_ylabel("PPI interactions (log2)")
-
-    plt.savefig(
-        f"{RPATH}/PPInteractions_robustness_landscape_{dt}.pdf",
-        bbox_inches="tight",
-    )
-    plt.savefig(
-        f"{RPATH}/PPInteractions_robustness_landscape_{dt}.png",
-        bbox_inches="tight",
-    )
-    plt.close("all")
-
 #
-dsets = ["crispr", "gexp", "prot"]
+dsets = ["crispr", "gexp"]
 
 order = natsorted(set(df_corr_ppi["n_ppi"]))
-pal = pd.Series(
-    sns.color_palette("Blues_d", n_colors=len(order)).as_hex(), index=order
-)
+pal = pd.Series(sns.color_palette("Blues_d", n_colors=len(order)).as_hex(), index=order)
 
-_, axs = plt.subplots(1, len(dsets), figsize=(3 * len(dsets), 2), dpi=600)
+_, axs = plt.subplots(1, len(dsets), figsize=(len(dsets) * 1.5, 2), dpi=600)
 
 for i, dt in enumerate(dsets):
     ax = axs[i]
@@ -434,14 +383,8 @@ for i, dt in enumerate(dsets):
         ax.axes.yaxis.set_ticklabels([])
 
 plt.subplots_adjust(hspace=0, wspace=0.05)
-plt.savefig(
-    f"{RPATH}/PPInteractions_ppi_regression.pdf",
-    bbox_inches="tight",
-)
-plt.savefig(
-    f"{RPATH}/PPInteractions_ppi_regression.png",
-    bbox_inches="tight",
-)
+plt.savefig(f"{RPATH}/PPInteractions_ppi_regression.pdf", bbox_inches="tight")
+plt.savefig(f"{RPATH}/PPInteractions_ppi_regression.png", bbox_inches="tight")
 plt.close("all")
 
 #

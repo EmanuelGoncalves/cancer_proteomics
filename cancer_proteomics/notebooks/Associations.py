@@ -127,12 +127,10 @@ lm_drug = pd.concat(
 ).reset_index()
 
 # Annotate merged table
-lm_drug = DataImport.lm_ppi_annotate_table(
-    lm_drug, ppi, drespo_skew, drug_targets=dtargets
-)
+lm_drug = DataImport.lm_ppi_annotate_table(lm_drug, ppi, drespo_skew, drug_targets=dtargets)
 lm_drug = lm_drug.sort_values("fdr")
 lm_drug.to_csv(
-    f"{TPATH}/lm_sklearn_degr_drug_annotated_DIANN.csv.gz", compression="gzip", index=False
+    f"{TPATH}/lm_sklearn_degr_drug_annotated_DIANN_270821.csv.gz", compression="gzip", index=False
 )
 
 # ## CRISPR
@@ -194,5 +192,5 @@ lm_crispr = pd.concat(
 lm_crispr = DataImport.lm_ppi_annotate_table(lm_crispr, ppi, crispr_skew)
 lm_crispr = lm_crispr.sort_values("fdr")
 lm_crispr.to_csv(
-    f"{TPATH}/lm_sklearn_degr_crispr_annotated_DIANN.csv.gz", compression="gzip", index=False
+    f"{TPATH}/lm_sklearn_degr_crispr_annotated_DIANN_270821.csv.gz", compression="gzip", index=False
 )

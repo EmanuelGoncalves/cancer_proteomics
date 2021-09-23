@@ -23,9 +23,11 @@ import numpy as np
 import pandas as pd
 import pkg_resources
 import seaborn as sns
+from natsort import natsorted
 import matplotlib.pyplot as plt
 from crispy.GIPlot import GIPlot
 from adjustText import adjust_text
+import matplotlib.patches as mpatches
 from crispy.Enrichment import Enrichment
 from crispy.CrispyPlot import CrispyPlot
 from sklearn.mixture import GaussianMixture
@@ -67,9 +69,7 @@ pg_corr = pd.DataFrame(
 ).assign(protein=genes)
 pg_corr = pg_corr.sort_values("pval").dropna()
 pg_corr["fdr"] = multipletests(pg_corr["pval"], method="fdr_bh")[1]
-pg_corr.to_csv(
-    f"{TPATH}/ProteinAttenuation_correlations_DIANN.csv.gz", index=False, compression="gzip"
-)
+pg_corr.to_csv(f"{TPATH}/ProteinAttenuation_correlations_DIANN.csv.gz", index=False, compression="gzip")
 
 # Histogram
 _, ax = plt.subplots(1, 1, figsize=(2.0, 1.5), dpi=600)
@@ -199,6 +199,7 @@ enr_obj = Enrichment(
 enr = enr_obj.hypergeom_enrichments(sublist, background, "c5.all.v7.1.symbols.gmt")
 enr = enr[enr["adj.p_value"] < 0.01].head(30).reset_index()
 enr["name"] = [i[3:].lower().replace("_", " ") for i in enr["gset"]]
+enr = enr.replace({"adj.p_value": 0}, value=enr[enr["adj.p_value"] != 0]["adj.p_value"].min())
 
 _, ax = plt.subplots(1, 1, figsize=(2.0, 5.0), dpi=600)
 
@@ -211,15 +212,27 @@ sns.barplot(
 )
 
 for i, (_, row) in enumerate(enr.iterrows()):
+    if row["p_value"] == 0:
+        plt.text(
+            -np.log10(row["adj.p_value"]),
+            i,
+            f">",
+            va="center",
+            ha="left",
+            fontsize=5,
+            zorder=10,
+            color=CrispyPlot.PAL_DTRACE[2],
+        )
+
     plt.text(
-        -np.log10(row["adj.p_value"]),
+        -np.log10(row["adj.p_value"]) * 0.99,
         i,
         f"{row['len_intersection']}/{row['len_sig']}",
         va="center",
-        ha="left",
+        ha="right",
         fontsize=5,
         zorder=10,
-        color=CrispyPlot.PAL_DTRACE[2],
+        color="white",
     )
 
 ax.grid(True, ls="-", lw=0.1, alpha=1.0, zorder=0, axis="x")
@@ -267,6 +280,7 @@ grid = GIPlot.gi_regression_marginal(
     plot_df,
     plot_reg=False,
     plot_annot=False,
+    plot_legend=False,
     scatter_kws=dict(edgecolor="w", lw=0.1, s=8),
     discrete_pal=discrete_pal,
 )
@@ -276,7 +290,7 @@ grid.ax_joint.set_xlim(ax_min, ax_max)
 grid.ax_joint.set_ylim(ax_min, ax_max)
 
 labels = [
-    grid.ax_joint.text(row["gexp_corr"], row["prot_corr"], i, color="k", fontsize=4)
+    grid.ax_joint.text(row["gexp_corr"], row["prot_corr"], i, color="k", fontsize=6)
     for i, row in plot_df.query("signature != 'All'")
     .sort_values("attenuation", ascending=False)
     .head(15)
@@ -288,12 +302,27 @@ adjust_text(
     ax=grid.ax_joint,
 )
 
+handles = [
+    mpatches.Circle(
+        (0.0, 0.0),
+        0.25,
+        facecolor=discrete_pal[t],
+        label=f"{t[3:].replace('_', ' ').lower()} (N={(plot_df['signature'] == t).sum()})",
+    )
+    for t in natsorted(set(plot_df["signature"]))
+]
+
+grid.ax_joint.legend(
+    handles=handles,
+    loc="upper left",
+    frameon=False,
+)
+
+grid.ax_joint.set_xlabel("Copy number and Transcriptomics\nPearson's r")
+grid.ax_joint.set_ylabel("Copy number and Proteomics\nPearson's r")
+
 plt.gcf().set_size_inches(2.5, 2.5)
 
-plt.savefig(
-    f"{RPATH}/ProteinTranscript_attenuation_scatter_signatures.pdf", bbox_inches="tight"
-)
-plt.savefig(
-    f"{RPATH}/ProteinTranscript_attenuation_scatter_signatures.png", bbox_inches="tight"
-)
+plt.savefig(f"{RPATH}/ProteinTranscript_attenuation_scatter_signatures.pdf", bbox_inches="tight")
+plt.savefig(f"{RPATH}/ProteinTranscript_attenuation_scatter_signatures.png", bbox_inches="tight")
 plt.close("all")

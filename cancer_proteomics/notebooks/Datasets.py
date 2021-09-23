@@ -28,12 +28,12 @@ from crispy import CrispyPlot
 from cancer_proteomics.notebooks import DataImport
 
 
-RPATH = pkg_resources.resource_filename("cancer_proteomics", "plots/")
+RPATH = pkg_resources.resource_filename("cancer_proteomics", "plots/DIANN/")
 
 # ### Imports
 
 # CMP samplesheet
-cmp = DataImport.read_cmp_samplesheet()
+cmp = DataImport.read_cmp_samplesheet().reset_index()
 cmp["CCLE_ID_SHORT"] = cmp["CCLE_ID"].apply(lambda v: v.split("_")[0] if str(v).lower() != 'nan' else np.nan)
 
 # Proteomics

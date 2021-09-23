@@ -175,7 +175,7 @@ class DataImport:
         if drug_targets is not None:
             # Machine learning scores
             ml_scores = pd.read_csv(
-                f"{cls.DPATH}/score_dl_min300_ic50_eg_id_20210804.csv", index_col=0
+                f"{cls.DPATH}/score_dl_min300_ic50_eg_id_20210830.csv", index_col=0
             )["corr"]
             table["r2"] = ml_scores.reindex(table["y_id"]).values
 
@@ -193,7 +193,7 @@ class DataImport:
         else:
             # Machine learning scores
             ml_scores = pd.read_csv(
-                f"{cls.DPATH}/score_dl_crispr_protein_20210804.csv", index_col=0
+                f"{cls.DPATH}/score_dl_crispr_protein_20210830.csv", index_col=0
             )["corr"]
             table["r2"] = ml_scores.reindex(table["y_id"]).values
 
@@ -215,7 +215,7 @@ class DataImport:
         :return:
         """
         return pd.read_excel(
-            f"{cls.DPATH}/SupplementaryTable1.xlsx", index_col=0, sheet_name="Panel"
+            f"{cls.DPATH}/SupplementaryTable1.xlsx", index_col=0, sheet_name="Cell lines"
         )
 
     @classmethod
@@ -240,6 +240,23 @@ class DataImport:
         return manifest
 
     @classmethod
+    def read_protein_matrix_unfiltered(cls, prot_file, map_protein=False):
+        protein = pd.read_csv(f"{cls.DPATH}/{prot_file}", sep="\t", index_col=0).T
+
+        protein = protein.drop(index=["RT-Kit-WR", "ProCal", "RMISv2"])
+
+        protein.columns = [c.split(";")[0] for c in protein]
+        protein.index = [c.split(";")[1] for c in protein.index]
+
+        if map_protein:
+            pmap = cls.map_gene_name().reindex(protein.index)["GeneSymbol"].dropna()
+
+            protein = protein[protein.index.isin(pmap.index)]
+            protein = protein.groupby(pmap.reindex(protein.index)).mean()
+
+        return protein
+
+    @classmethod
     def read_protein_matrix(cls, map_protein=False, subset=None, min_measurements=None):
         """
         Read protein level matrix.
@@ -249,7 +266,8 @@ class DataImport:
         # Read protein level normalised intensities
         protein = pd.read_csv(
             # f"{cls.DPATH}/E0022_P06_Protein_Matrix_ProNorM_STR_failed_removed.csv.gz",
-            f"{cls.DPATH}/e0022_diann_protein_matrix_pronorm_210721_corrected.txt.gz",
+            # f"{cls.DPATH}/e0022_diann_protein_matrix_pronorm_210721_corrected.txt.gz",
+            f"{cls.DPATH}/e0022_diann_protein_matrix_270821_normalised_averaged.txt.gz",
             sep="\t",
             index_col=0,
         ).T
@@ -275,7 +293,7 @@ class DataImport:
             protein = protein.loc[:, protein.columns.isin(subset)]
 
         if min_measurements is not None:
-            protein = protein[protein.count(1) > 300]
+            protein = protein[protein.count(1) >= min_measurements]
 
         return protein
 
@@ -346,12 +364,24 @@ class DataImport:
 
     @classmethod
     def read_peptide_raw_mean(cls):
-        peptide_raw_mean = pd.read_csv(
-            f"{cls.DPATH}/E0022_P06_Protein_Matrix_Raw_Mean_Intensities.tsv.gz",
+        protein_raw_mean = pd.read_csv(
+            f"{cls.DPATH}/e0022_diann_protein_matrix_070921_raw_averaged.txt.gz",
             sep="\t",
             index_col=0,
-        ).iloc[:, 0]
-        return peptide_raw_mean
+        ).T
+
+        protein_raw_mean.columns = [i.split(";")[0] for i in protein_raw_mean]
+        protein_raw_mean.index = [i.split(";")[1] for i in protein_raw_mean.index]
+
+        # Map protein
+        pmap = cls.map_gene_name().reindex(protein_raw_mean.index)["GeneSymbol"].dropna()
+        protein_raw_mean = protein_raw_mean[protein_raw_mean.index.isin(pmap.index)]
+        protein_raw_mean = protein_raw_mean.groupby(pmap.reindex(protein_raw_mean.index)).mean()
+
+        # Calculate mean
+        protein_raw_mean = protein_raw_mean.mean(1)
+
+        return protein_raw_mean
 
     @classmethod
     def read_gene_matrix(cls, subset=None):
@@ -413,6 +443,31 @@ class DataImport:
         )
         cannot = cannot.query("Duplicate == False").dropna(subset=["CMP_ID"])
         return cannot.set_index("CMP_ID")["source"]
+
+    @staticmethod
+    def read_cmp_samplesheet():
+        cmp_ss = pd.read_csv("https://cog.sanger.ac.uk/cmp/download/model_list_20210719.csv", index_col=0)
+        return cmp_ss
+
+    @classmethod
+    def read_mobem(cls, drop_factors=True, add_msi=True):
+        idmap = cls.read_cmp_samplesheet()
+        idmap = idmap.reset_index().dropna(subset=["COSMIC_ID", "model_id"]).set_index("COSMIC_ID")["model_id"]
+
+        mobem = pd.read_csv(f"{cls.DPATH}/PANCAN_mobem.csv.gz", index_col=0)
+        mobem = mobem[mobem.index.astype(str).isin(idmap.index)]
+        mobem = mobem.set_index(idmap[mobem.index.astype(str)].values)
+
+        if drop_factors is not None:
+            mobem = mobem.drop(columns={"TISSUE_FACTOR", "MSI_FACTOR", "MEDIA_FACTOR"})
+
+        if add_msi:
+            msi_status = cls.read_cmp_samplesheet()["msi_status"]
+            mobem["msi_status"] = (msi_status.loc[mobem.index] == "MSI").astype(int).values
+
+        mobem = mobem.astype(int).T
+
+        return mobem
 
     @classmethod
     def read_drug_response(
@@ -516,11 +571,6 @@ class DataImport:
         )
         data = pd.pivot_table(data, index="broad_id", columns="depmap_id", values="auc")
         return data
-
-    @classmethod
-    def read_cmp_samplesheet(cls):
-        ss = pd.read_csv(f"{cls.DPATH}/model_list_20210212.csv")
-        return ss
 
 
 class DimReduction:

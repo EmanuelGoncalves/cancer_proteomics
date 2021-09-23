@@ -26,7 +26,6 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from crispy.GIPlot import GIPlot
 from adjustText import adjust_text
-from matplotlib_venn import venn2, venn2_circles
 from crispy.CrispyPlot import CrispyPlot
 from cancer_proteomics.notebooks import DataImport, PALETTE_TTYPE
 
@@ -45,7 +44,6 @@ ss = DataImport.read_samplesheet()
 
 # Read proteomics (Proteins x Cell lines)
 prot = DataImport.read_protein_matrix(map_protein=True)
-peptide_raw_mean = DataImport.read_peptide_raw_mean()
 
 # Read Transcriptomics
 gexp = DataImport.read_gene_matrix()
@@ -66,7 +64,7 @@ lm_crispr = pd.read_csv(f"{TPATH}/lm_sklearn_degr_crispr_annotated_DIANN.csv.gz"
 
 # Selective and predictive dependencies
 #
-R2_THRES = 0.4
+R2_THRES = 0.3
 SKEW_THRES = -1
 FDR_THRES = 0.1
 
@@ -83,50 +81,67 @@ dep_df = pd.concat(
     ]
 ).dropna()
 
-x = dep_df.query("dtype == 'drug'")[["r2"]]
-
 # Selectivity plot
 #
-_, ax = plt.subplots(1, 1, figsize=(3, 3), dpi=600)
+plot_info = [
+    ("CRISPR-Cas9", "o", CrispyPlot.PAL_DTRACE[3]),
+    ("Drug Response", "o", CrispyPlot.PAL_DTRACE[1]),
+]
 
-plot_info = [("crispr", "o", CrispyPlot.PAL_DTRACE[2]), ("drug", "X", "#FEC041")]
 for i, (n, m, c) in enumerate(plot_info):
-    n_df = dep_df.query(f"dtype == '{n}'")
+    _, ax = plt.subplots(1, 1, figsize=(2, 2), dpi=600)
 
-    n_ax = ax if n == "crispr" else ax.twiny()
+    labels = []
 
-    n_ax.scatter(
-        n_df["skew"], n_df["r2"], marker=m, s=3, c=c, zorder=(i + 1), alpha=0.8, lw=0
+    n_df = dep_df.replace({
+        "dtype": {"drug": "Drug Response", "crispr": "CRISPR-Cas9"},
+    }).query(f"dtype == '{n}'").copy()
+
+    ax.scatter(
+        n_df["skew"],
+        n_df["r2"],
+        marker=m,
+        s=3,
+        c=c,
+        zorder=0,
+        alpha=0.8,
+        lw=0,
+        label=n,
     )
 
-    n_ax.set_xlabel(f"{n} skewness", color=c)
-    n_ax.set_ylabel("R2")
+    ax.set_xlabel("Standardised skewness")
+    ax.set_ylabel("Pearson's r")
+    ax.set_title(n)
 
-    labels = n_df.query(f"r2 > {R2_THRES}").sort_values("skew").head(20)
-    labels = labels.append(n_df.query(f"skew < -5").sort_values("skew").head(20)).drop_duplicates()
+    for _, row in (
+        n_df.query(f"r2 > {R2_THRES}").sort_values("skew").head(15).iterrows()
+    ):
+        labels.append(row)
 
     labels = [
-        n_ax.text(
+        ax.text(
             row["skew"],
             row["r2"],
-            row["y_id"] if n == "crispr" else row["y_id"].split(";")[1],
+            row["y_id"] if row["dtype"] == "CRISPR-Cas9" else row["y_id"].split(";")[1],
             color="k",
-            fontsize=4,
+            fontsize=5,
             zorder=3,
         )
-        for _, row in labels.iterrows()
+        for row in labels
     ]
     adjust_text(
-        labels, arrowprops=dict(arrowstyle="-", color="k", alpha=0.75, lw=0.3), ax=n_ax
+        labels, arrowprops=dict(arrowstyle="-", color="k", alpha=0.75, lw=0.3), ax=ax
     )
 
-ax.grid(axis="y", lw=0.1, color="#e1e1e1", zorder=0)
-ax.axhline(R2_THRES, c="#E3213D", lw=0.3, ls="--")
-ax.axvline(-5, c="#E3213D", lw=0.3, ls="--")
+    ax.grid(axis="both", lw=0.1, color="#e1e1e1", zorder=0)
+    ax.axhline(R2_THRES, c=CrispyPlot.PAL_DTRACE[1], lw=0.3, ls="--", zorder=2)
 
-plt.savefig(f"{RPATH}/TopHits_selectivity_predictive_scatter.pdf", bbox_inches="tight")
-plt.savefig(f"{RPATH}/TopHits_selectivity_predictive_scatter.png", bbox_inches="tight")
-plt.close("all")
+    plt.savefig(
+        f"{RPATH}/TopHits_selectivity_predictive_scatter_{n}.pdf", bbox_inches="tight"
+    )
+    plt.savefig(
+        f"{RPATH}/TopHits_selectivity_predictive_scatter_{n}.png", bbox_inches="tight"
+    )
 
 
 # Predictive features of selective and predictive dependencies
@@ -136,17 +151,6 @@ tophits = dep_df.query(f"(r2 > {R2_THRES}) & (skew < {SKEW_THRES})")
 tophits_feat_drug = set(lm_drug.query(f"fdr < {FDR_THRES}")["x_id"])
 tophits_feat_crispr = set(lm_crispr.query(f"fdr < {FDR_THRES}")["x_id"])
 tophits_feat_union = set.union(tophits_feat_drug, tophits_feat_crispr)
-
-_, ax = plt.subplots(1, 1, figsize=(1.5, 1.5), dpi=600)
-venn_groups = [tophits_feat_drug, tophits_feat_crispr]
-venn2(
-    venn_groups, set_labels=["Drug", "CRISPR"], set_colors=["#FEC041", "#009EAC"], ax=ax
-)
-venn2_circles(venn_groups, linewidth=0.5, ax=ax)
-plt.title(f"Top protein features (FDR < {FDR_THRES * 100:.0f}%)")
-plt.savefig(f"{RPATH}/TopHits_features_venn.pdf", bbox_inches="tight")
-plt.savefig(f"{RPATH}/TopHits_features_venn.png", bbox_inches="tight")
-plt.close("all")
 
 tophits_feat = pd.concat(
     [
@@ -158,28 +162,18 @@ tophits_feat = tophits_feat[tophits_feat["y_id"].isin(tophits["y_id"])]
 tophits_feat = tophits_feat.query(f"fdr < {FDR_THRES}")
 
 
-def calculate_score(pval, beta):
-    s = np.log10(pval)
-    if beta > 0:
-        s *= -1
-    return s
-
-
-tophits_feat["score"] = [
-    calculate_score(p, b) for p, b in tophits_feat[["pval", "beta"]].values
-]
-
 # Top dependencies
 #
 
 topdep = ["FOXA1"]
 
-# Top associations
 for y_id in topdep:
     # y_id = "TP63"
     plot_df = (
-        tophits_feat.query(f"y_id == '{y_id}'").query("n > 60")
-        .head(10).sort_values("pval")
+        tophits_feat.query(f"y_id == '{y_id}'")
+        .query("n > 60")
+        .head(10)
+        .sort_values("pval")
         .reset_index(drop=True)
         .reset_index()
     )
@@ -235,10 +229,12 @@ for y_id in topdep:
     ax.axes.get_xaxis().set_ticks([])
 
     plt.savefig(f"{RPATH}/TopHits_top_associations_{y_id}.pdf", bbox_inches="tight")
-    plt.savefig(f"{RPATH}/TopHits_top_associations_{y_id}.png", bbox_inches="tight", dpi=600)
+    plt.savefig(
+        f"{RPATH}/TopHits_top_associations_{y_id}.png", bbox_inches="tight", dpi=600
+    )
     plt.close("all")
 
-#
+# Association plots
 #
 gi_pairs = [
     # (
@@ -250,11 +246,11 @@ gi_pairs = [
     # ("RAD21", "STAG1", "crispr", ["Bone", "Central Nervous System", "Breast"]),
     # ("MET", "1403;AZD6094;GDSC1", "drug", ["Stomach", "Esophagus", "Lung"]),
     # ("ACIN1", "BRAF", "crispr", ["Skin", "Breast", "Large Intestine", "Ovary"]),
+    # ("REXO4", "TP53", "crispr", None),
     ("BSG", "FOXA1", "crispr", ["Breast"]),
     ("PRKAR1A", "PRKAR1A", "crispr", None),
     ("HNRNPH1", "HNRNPH1", "crispr", None),
     ("TP53", "MDM2", "crispr", None),
-    ("REXO4", "TP53", "crispr", None),
 ]
 
 for p, c, dtype, ctissues in gi_pairs:
@@ -274,7 +270,9 @@ for p, c, dtype, ctissues in gi_pairs:
     ).dropna(subset=[f"{c}_y", f"{p}_prot"])
 
     # Protein
-    ax = GIPlot.gi_tissue_plot(f"{p}_prot", f"{c}_y", plot_df, pal=PALETTE_TTYPE, hue="Tissue_type")
+    ax = GIPlot.gi_tissue_plot(
+        f"{p}_prot", f"{c}_y", plot_df, pal=PALETTE_TTYPE, hue="Tissue_type"
+    )
 
     if dtype == "drug":
         ax.axhline(np.log(dmaxc[c]), ls="--", lw=0.3, color=CrispyPlot.PAL_DTRACE[1])
@@ -296,7 +294,11 @@ for p, c, dtype, ctissues in gi_pairs:
     # Protein
     if ctissues is not None:
         ax = GIPlot.gi_tissue_plot(
-            f"{p}_prot", f"{c}_y", plot_df[plot_df["Tissue_type"].isin(ctissues)], pal=PALETTE_TTYPE, hue="Tissue_type"
+            f"{p}_prot",
+            f"{c}_y",
+            plot_df[plot_df["Tissue_type"].isin(ctissues)],
+            pal=PALETTE_TTYPE,
+            hue="Tissue_type",
         )
 
         if dtype == "drug":
@@ -319,7 +321,9 @@ for p, c, dtype, ctissues in gi_pairs:
         plt.close("all")
 
     # Gene expression
-    ax = GIPlot.gi_tissue_plot(f"{p}_gexp", f"{c}_y", plot_df, pal=PALETTE_TTYPE, hue="Tissue_type")
+    ax = GIPlot.gi_tissue_plot(
+        f"{p}_gexp", f"{c}_y", plot_df, pal=PALETTE_TTYPE, hue="Tissue_type"
+    )
 
     if dtype == "drug":
         ax.axhline(np.log(dmaxc[c]), ls="--", lw=0.3, color=CrispyPlot.PAL_DTRACE[1])
@@ -338,57 +342,61 @@ for p, c, dtype, ctissues in gi_pairs:
     )
     plt.close("all")
 
+##
 #
-breast_subtypes = pd.read_csv(f"{DPATH}/breast_subtypes.txt", sep="\t", index_col=0)
 
-corder = ["FOXA1", "BSG"]
+pam50 = pd.read_csv(f"{DPATH}/breast_subtypes.txt", sep="\t", index_col=0)
+
+p, c, dtype, ctissues = ("BSG", "FOXA1", "crispr", ["Breast"])
 
 plot_df = pd.concat(
-    [crispr.loc["FOXA1"], prot.loc["BSG"], breast_subtypes["pam50"]], axis=1
-).dropna(subset=corder)
+    [
+        crispr.loc[["FOXA1"]].T,
+        prot.loc[["BSG", "VIM"]].T,
+        ss["Tissue_type"],
+        pam50["pam50"],
+        ss["F2"],
+    ],
+    axis=1,
+    sort=False,
+).dropna(subset=[p, c])
 
-plot_df = pd.melt(plot_df, value_vars=["FOXA1", "BSG"], id_vars=["pam50"]).dropna()
+plot_df = plot_df.replace({"pam50": {np.nan: "NA"}})
 
-g = sns.catplot(
-    "pam50",
-    "value",
-    data=plot_df,
-    col="variable",
-    facet_kws=dict(despine=False),
-    sharex="row",
-    sharey="col",
-    height=2.5,
-    kind="swarm",
-    col_order=corder,
+pal = {"NA": "#e1e1e1", 0: CrispyPlot.PAL_DTRACE[1], "LumB": '#1f77b4', "Her2": '#ff7f0e', "Basal": '#2ca02c', "LumA": '#d62728', "Normal": '#9467bd'}
+
+# BSG ~ FOXA1 scatter
+g = GIPlot.gi_regression_marginal(
+    "FOXA1", "BSG", "pam50",
+    plot_df,
+    discrete_pal=pal,
+    legend_title="Breast - PAM50",
+    hue_order=pal.keys(),
+    scatter_kws=dict(edgecolor="w", lw=0.1, s=16),
 )
 
-g.set_axis_labels("Breast cancer PAM50 subtypes", "")
+g.ax_joint.set_xlabel(f"BSG\nProtein intensities")
+g.ax_joint.set_ylabel(f"FOXA1\nCRISPR-Cas9 (log2 FC)")
 
-titles = ["FOXA1\nCRISPR-Cas9 (log2 FC)", "BSG\nProtein intensities"]
-for i, ax in enumerate(g.axes[0]):
-    ax.set_title(titles[i])
-    sns.boxplot(
-        "pam50",
-        "value",
-        data=plot_df.query(f"variable == '{corder[i]}'"),
-        sym="",
-        boxprops=dict(facecolor=(0, 0, 0, 0)),
-        zorder=2,
-        ax=ax,
-    )
-    ax.grid(True, ls="-", lw=0.1, alpha=1.0, zorder=0, axis="both")
-    ax.set_ylabel("")
+plt.gcf().set_size_inches(2, 2)
 
-plt.savefig(f"{RPATH}/TopHits_FOXA1_BSG_Breast_Subtypes.pdf", bbox_inches="tight")
-plt.savefig(
-    f"{RPATH}/TopHits_FOXA1_BSG_Breast_Subtypes.png", bbox_inches="tight", dpi=600
+plt.savefig(f"{RPATH}/TopHits_FOXA1_BSG_scatter.pdf", bbox_inches="tight")
+plt.savefig(f"{RPATH}/TopHits_FOXA1_BSG_scatter.png", bbox_inches="tight", dpi=600)
+
+# BSG ~ F2 scatter
+g = GIPlot.gi_regression_marginal(
+    "F2", "BSG", "pam50",
+    plot_df,
+    discrete_pal=pal,
+    legend_title="Breast - PAM50",
+    hue_order=pal.keys(),
+    scatter_kws=dict(edgecolor="w", lw=0.1, s=16),
 )
-plt.close("all")
 
-#
+g.ax_joint.set_xlabel(f"BSG\nProtein intensities")
+g.ax_joint.set_ylabel(f"MOFA Factor 2")
 
-x = pd.concat([
-    drespo.loc[["1909;Venetoclax;GDSC2", "1373;Dabrafenib;GDSC1", "1427;AZD5582;GDSC1"]].T,
-    prot.loc[["TSNAX", "DBNL", "NOC2L"]].T,
-    ss["tissue"]
-], axis=1)
+plt.gcf().set_size_inches(2, 2)
+
+plt.savefig(f"{RPATH}/TopHits_F2_BSG_scatter.pdf", bbox_inches="tight")
+plt.savefig(f"{RPATH}/TopHits_F2_BSG_scatter.png", bbox_inches="tight", dpi=600)

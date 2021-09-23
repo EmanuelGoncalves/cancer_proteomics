@@ -74,7 +74,7 @@ lm_crispr = pd.read_csv(f"{TPATH}/lm_sklearn_degr_crispr_annotated_DIANN.csv.gz"
 #
 for dtype, lm_df in [
     ("Drug-Protein", lm_drug.query("n > 60")),
-    ("CRISPR-Protein", lm_crispr.query("n > 60"))
+    ("CRISPR-Protein", lm_crispr.query("n > 60")),
 ]:
     for pvar in ["nc_pval", "pval"]:
         # dtype, lm_df, pvar = "Drug-Protein", lm_drug, "nc_pval"
@@ -92,7 +92,11 @@ for dtype, lm_df in [
                 pts_kws=dict(color=PPI_PAL[n]),
             )
 
-            plot_df.append(pd.DataFrame({"qnull": x_var, "qemp": y_var, "lambda": l_var, "target": n}))
+            plot_df.append(
+                pd.DataFrame(
+                    {"qnull": x_var, "qemp": y_var, "lambda": l_var, "target": n}
+                )
+            )
 
         plt.close("all")
 
@@ -103,8 +107,13 @@ for dtype, lm_df in [
 
         for t in CrispyPlot.PPI_ORDER:
             df = plot_df.query(f"target == '{t}'")
-            ax.scatter(df["qnull"], df["qemp"], c=CrispyPlot.PPI_PAL[t], label=f"{t} ($\lambda$={v_lambda[t]:.2f})",
-                       s=4)
+            ax.scatter(
+                df["qnull"],
+                df["qemp"],
+                c=CrispyPlot.PPI_PAL[t],
+                label=f"{t} ($\lambda$={v_lambda[t]:.2f})",
+                s=4,
+            )
 
         ax.grid(True, ls=":", lw=0.1, alpha=1.0, zorder=0)
 
@@ -118,5 +127,7 @@ for dtype, lm_df in [
         ax.set_title("CRISPR-Protein associations")
 
         plt.savefig(f"{RPATH}/LM_qqplot_{dtype}_{pvar}.pdf", bbox_inches="tight")
-        plt.savefig(f"{RPATH}/LM_qqplot_{dtype}_{pvar}.png", bbox_inches="tight", dpi=600)
+        plt.savefig(
+            f"{RPATH}/LM_qqplot_{dtype}_{pvar}.png", bbox_inches="tight", dpi=600
+        )
         plt.close("all")

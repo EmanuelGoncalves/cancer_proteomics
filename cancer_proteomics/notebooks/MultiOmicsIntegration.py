@@ -18,13 +18,16 @@
 # %load_ext autoreload
 # %autoreload 2
 
+import gseapy
 import logging
 import pandas as pd
 import pkg_resources
 import seaborn as sns
 import matplotlib.pyplot as plt
 from crispy.GIPlot import GIPlot
+from crispy.LMModels import LModel
 from crispy.MOFA import MOFA, MOFAPlot
+from crispy.Enrichment import Enrichment
 from cancer_proteomics.notebooks import DataImport, two_vars_correlation, PALETTE_TTYPE
 
 
@@ -41,7 +44,7 @@ RPATH = pkg_resources.resource_filename("cancer_proteomics", "plots/DIANN/")
 ss = DataImport.read_samplesheet()
 
 # Read proteomics (Proteins x Cell lines)
-prot = DataImport.read_protein_matrix(map_protein=True, min_measurements=30)
+prot = DataImport.read_protein_matrix(map_protein=True, min_measurements=3)
 
 # Read proteomics BROAD (Proteins x Cell lines)
 prot_broad = DataImport.read_protein_matrix_broad()
@@ -51,29 +54,32 @@ gexp = DataImport.read_gene_matrix()
 
 # Read CRISPR
 crispr = DataImport.read_crispr_matrix()
+crispr_institute = DataImport.read_crispr_institute()[crispr.columns]
 
 # Read Methylation
 methy = DataImport.read_methylation_matrix()
 
 # Read Drug-response
-drespo = DataImport.read_drug_response(min_measurements=30)
+drespo = DataImport.read_drug_response(min_measurements=3)
+dtargets = DataImport.read_drug_target()
+
+# Mobems
+mobems = DataImport.read_mobem()
 
 
 # ### Covariates
-
 covariates = pd.concat(
     [
         ss["CopyNumberAttenuation"],
-        ss["GeneExpressionAttenuation"],
-        ss["EMT"],
+        ss["GeneExpressionCorrelation"],
         ss["Proteasome"],
         ss["TranslationInitiation"],
         ss["CopyNumberInstability"],
+        ss["EMT"],
         prot.loc[["CDH1", "VIM"]].T.add_suffix("_prot"),
         gexp.loc[["CDH1", "VIM"]].T.add_suffix("_gexp"),
         pd.get_dummies(ss["media"]),
         pd.get_dummies(ss["growth_properties"]),
-        pd.get_dummies(ss["Tissue_type"])[["Haematopoietic and Lymphoid", "Lung"]],
         ss[["ploidy", "mutational_burden", "growth", "size"]],
         ss["replicates_correlation"].rename("RepsCorrelation"),
         prot.mean().rename("MeanProteomics"),
@@ -92,7 +98,13 @@ groupby = ss.loc[prot.columns, "Tissue_type"].apply(
 )
 
 mofa = MOFA(
-    views=dict(proteomics=prot, proteomics_broad=prot_broad, transcriptomics=gexp, methylation=methy, drespo=drespo),
+    views=dict(
+        proteomics=prot,
+        proteomics_broad=prot_broad,
+        transcriptomics=gexp,
+        methylation=methy,
+        drespo=drespo,
+    ),
     covariates=dict(
         proteomics=covariates[["MeanProteomics"]].dropna(),
     ),
@@ -130,34 +142,115 @@ for f in mofa.factors:
         )
 n_factors_pval = pd.DataFrame(n_factors_pval)
 
-
 # Factor clustermap
 MOFAPlot.factors_corr_clustermap(mofa)
 plt.savefig(f"{RPATH}/MultiOmics_factors_corr_clustermap.pdf", bbox_inches="tight")
-plt.savefig(
-    f"{RPATH}/MultiOmics_factors_corr_clustermap.png", bbox_inches="tight", dpi=600
-)
+plt.savefig(f"{RPATH}/MultiOmics_factors_corr_clustermap.png", bbox_inches="tight", dpi=600)
 plt.close("all")
 
 # Variance explained across data-sets
 MOFAPlot.variance_explained_heatmap(mofa)
 plt.savefig(f"{RPATH}/MultiOmics_factors_rsquared_heatmap.pdf", bbox_inches="tight")
-plt.savefig(
-    f"{RPATH}/MultiOmics_factors_rsquared_heatmap.png", bbox_inches="tight", dpi=600
-)
+plt.savefig(f"{RPATH}/MultiOmics_factors_rsquared_heatmap.png", bbox_inches="tight", dpi=600)
 plt.close("all")
 
-# Covairates correlation heatmap
-MOFAPlot.covariates_heatmap(n_factors_corr, mofa, ss["Tissue_type"])
-plt.savefig(
-    f"{RPATH}/MultiOmics_factors_covariates_clustermap.pdf", bbox_inches="tight"
+# ### Overview heatmap
+# Tissue-specific proteins
+tissue_proteins = pd.read_csv(f"{DPATH}/Tissue_specific_proteins.txt", sep="\t")
+tissue_proteins["id"] = tissue_proteins["Protein"].apply(lambda v: v.split(";")[1]).values
+tissue_proteins["GeneSymbol"] = DataImport.map_gene_name().reindex(tissue_proteins["id"])["GeneSymbol"].values
+
+# Build gmt dict
+gmts = tissue_proteins.groupby("Tissue")["GeneSymbol"].agg(set).to_dict()
+gmts = {k: v for k, v in gmts.items() if len(v) >= 10}
+
+# Factor enrichment
+enr_obj = Enrichment(dict(tissue=gmts), sig_min_len=10)
+enr = pd.DataFrame(
+    {
+        f: enr_obj.gsea_enrichments(mofa.weights["proteomics"][f])["e_score"].to_dict()
+        for f in mofa.weights["proteomics"]
+    }
 )
-plt.savefig(
-    f"{RPATH}/MultiOmics_factors_covariates_clustermap.png",
-    bbox_inches="tight",
-    dpi=600,
+
+# Export matrix
+covs_main = ["EMT", "VIM_prot", "VIM_gexp", "CDH1_prot", "CDH1_gexp"]
+covs_supp = [f for f in n_factors_corr.index if f not in covs_main]
+
+plot_df_main = pd.concat(
+    [mofa.rsquare[k].T.add_prefix(f"{k}_").T for k in mofa.rsquare]
+    + [n_factors_corr.T[covs_main].add_prefix(f"Main_").T]
+    + [enr.T.add_prefix(f"Tissue_").T]
 )
-plt.close("all")
+
+plot_df_supp = pd.concat(
+    [mofa.rsquare[k].T.add_prefix(f"{k}_").T for k in mofa.rsquare]
+    + [n_factors_corr.T[covs_supp].add_prefix(f"Supp_").T]
+    + [enr.T.add_prefix(f"Tissue_").T]
+)
+
+for plot_df, ratio, name in [
+    (plot_df_main.copy(), 2, "Main"),
+    (plot_df_supp.copy(), 6, "Supp"),
+]:
+    f, axs = plt.subplots(
+        4,
+        1,
+        sharex="col",
+        sharey="none",
+        gridspec_kw={"height_ratios": [2] * 2 + [ratio] + [4]},
+        figsize=(plot_df.shape[1] * 0.22, plot_df.shape[0] * 0.22),
+    )
+
+    for i, n in enumerate(["Haem", "Other"]):
+        df = plot_df[[i.startswith(n) for i in plot_df.index]]
+        df.index = [i.split("_")[1] for i in df.index]
+        g = sns.heatmap(
+            df,
+            cmap="Blues",
+            annot=True,
+            cbar=False,
+            fmt=".1f",
+            linewidths=0.5,
+            ax=axs[i],
+            vmin=0,
+            annot_kws={"fontsize": 5},
+        )
+        axs[i].set_ylabel(f"{n} cell lines")
+
+    df = plot_df[[i.split("_")[0] in ["Main", "Supp"] for i in plot_df.index]]
+    df.index = [i.replace("_prot", " (Proteomics)").replace("_gexp", " (Transcriptomics)").split("_")[1] for i in df.index]
+    sns.heatmap(
+        df,
+        cmap="RdYlGn",
+        center=0,
+        annot=True,
+        cbar=False,
+        fmt=".2f",
+        linewidths=0.5,
+        annot_kws={"fontsize": 5},
+        ax=axs[2],
+    )
+
+    df = plot_df[[i.split("_")[0] in ["Tissue"] for i in plot_df.index]]
+    df.index = [i.split("_")[1] for i in df.index]
+    sns.heatmap(
+        df,
+        cmap="RdGy",
+        center=0,
+        annot=True,
+        cbar=False,
+        fmt=".2f",
+        linewidths=0.5,
+        annot_kws={"fontsize": 5},
+        ax=axs[3],
+    )
+
+    plt.subplots_adjust(hspace=0.1)
+
+    plt.savefig(f"{RPATH}/MultiOmics_clustermap_merged_{name}.pdf", bbox_inches="tight")
+    plt.savefig(f"{RPATH}/MultiOmics_clustermap_merged_{name}.png", bbox_inches="tight", dpi=600)
+    plt.close("all")
 
 
 # ### MOFA Factor 1 and 2
@@ -179,71 +272,88 @@ ax = GIPlot.gi_tissue_plot(f_x, f_y, plot_df, hue="Tissue_type", plot_reg=False,
 ax.set_xlabel(f"Factor {f_x[1:]}")
 ax.set_ylabel(f"Factor {f_y[1:]}")
 plt.savefig(f"{RPATH}/MultiOmics_{f_x}_{f_y}_tissue_plot.pdf", bbox_inches="tight")
-plt.savefig(
-    f"{RPATH}/MultiOmics_{f_x}_{f_y}_tissue_plot.png", bbox_inches="tight", dpi=600
-)
+plt.savefig(f"{RPATH}/MultiOmics_{f_x}_{f_y}_tissue_plot.png", bbox_inches="tight", dpi=600)
 plt.close("all")
 
 # Continous annotation
 for z in ["VIM_proteomics", "CDH1_proteomics"]:
-    ax = GIPlot.gi_continuous_plot(
-        f_x, f_y, z, plot_df, cbar_label=z.replace("_", " ")
-    )
+    ax = GIPlot.gi_continuous_plot(f_x, f_y, z, plot_df, cbar_label=z.replace("_", " "))
     ax.set_xlabel(f"Factor {f_x[1:]}")
     ax.set_ylabel(f"Factor {f_y[1:]}")
-    plt.savefig(
-        f"{RPATH}/MultiOmics_{f_x}_{f_y}_continous_{z}.pdf", bbox_inches="tight"
-    )
-    plt.savefig(
-        f"{RPATH}/MultiOmics_{f_x}_{f_y}_continous_{z}.png",
-        bbox_inches="tight",
-        dpi=600,
-    )
+    plt.savefig(f"{RPATH}/MultiOmics_{f_x}_{f_y}_continous_{z}.pdf", bbox_inches="tight")
+    plt.savefig(f"{RPATH}/MultiOmics_{f_x}_{f_y}_continous_{z}.png", bbox_inches="tight", dpi=600)
     plt.close("all")
 
-# Export matrix
-plot_df = pd.concat([mofa.rsquare[k].T.add_prefix(f"{k}_").T for k in mofa.rsquare] + [n_factors_corr.T.add_prefix(f"Corr_").T]).iloc[:, :5]
 
-f, axs = plt.subplots(
-    3,
-    1,
-    sharex="col",
-    sharey="none",
-    gridspec_kw={"height_ratios": [1.5] * 2 + [9]},
-    figsize=(plot_df.shape[1] * 0.25, plot_df.shape[0] * 0.25),
-)
+# ### MOFA Factor 11
+f = "F11"
 
-for i, n in enumerate(["Haem", "Other"]):
-    df = plot_df[[i.startswith(n) for i in plot_df.index]]
-    df.index = [i.split("_")[1] for i in df.index]
-    g = sns.heatmap(
-        df,
-        cmap="Blues",
-        annot=True,
-        cbar=False,
-        fmt=".1f",
-        linewidths=0.5,
-        ax=axs[i],
-        vmin=0,
-        annot_kws={"fontsize": 5},
-    )
-    axs[i].set_ylabel(f"{n} cell lines")
-#
-df = plot_df[[i.split("_")[0] not in ["Haem", "Other"] for i in plot_df.index]]
-sns.heatmap(
-    df,
-    cmap="RdYlGn",
-    center=0,
-    annot=True,
-    cbar=False,
-    fmt=".2f",
-    linewidths=0.5,
-    annot_kws={"fontsize": 5},
-    ax=axs[2],
-)
+# GSEA enrichment plot
+enr_obj = Enrichment(dict(tissue=gmts), sig_min_len=10, permutations=int(1e4))
 
-plt.subplots_adjust(hspace=0.025)
+enr_obj.plot(mofa.weights["proteomics"][f], "tissue", "Skin", vertical_lines=True)
 
-plt.savefig(f"{RPATH}/SampleAttenuation_clustermap_merged.pdf", bbox_inches="tight")
-plt.savefig(f"{RPATH}/SampleAttenuation_clustermap_merged.png", bbox_inches="tight", dpi=600)
+plt.gcf().set_size_inches(3, 2)
+
+plt.savefig(f"{RPATH}/MultiOmics_Skin_{f}_GSEA_plot.pdf", bbox_inches="tight")
+plt.savefig(f"{RPATH}/MultiOmics_Skin_{f}_GSEA_plot.png", bbox_inches="tight", dpi=600)
 plt.close("all")
+
+#
+sel_drugs = ["2508;Trametinib;GDSC2", "1062;Selumetinib;GDSC2", "1373;Dabrafenib;GDSC2"]
+sel_crispr = ["BRAF", "SOX10", "MITF", "MAPK1"]
+sel_mobems = ["BRAF_mut"]
+
+plot_df = pd.concat([
+    mofa.factors[f],
+    drespo.loc[sel_drugs].T,
+    crispr.loc[sel_crispr].T,
+    mobems.loc[sel_mobems].T,
+    ss["Tissue_type"],
+], axis=1)
+
+plot_df["Skin"] = [i if i == "Skin" else "Other" for i in plot_df["Tissue_type"]]
+
+pal = {
+    "Skin": PALETTE_TTYPE["Skin"],
+    "Other": "#e1e1e1",
+    0: "#E1E1E1",
+}
+
+pal_order = ["Other", "Skin"]
+
+for y_var in ["1373;Dabrafenib;GDSC2", "BRAF"]:
+    df = plot_df.dropna(subset=["F11", y_var, "Skin"])
+
+    g = GIPlot.gi_regression_marginal(
+        x="F11",
+        y=y_var,
+        z="Skin",
+        plot_df=df,
+        discrete_pal=pal,
+        hue_order=pal_order,
+        legend_title="Skin - BRAF mut",
+        scatter_kws=dict(edgecolor="w", lw=0.1, s=16)
+    )
+
+    sns.scatterplot(
+        x="F11",
+        y=y_var,
+        hue="Skin",
+        hue_order=pal_order,
+        style="BRAF_mut",
+        style_order=[0, 1],
+        data=df.sort_values("Skin"),
+        palette=pal,
+        legend=False,
+        ax=g.ax_joint,
+    )
+
+    g.ax_joint.set_xlabel(f"Factor 11")
+    g.ax_joint.set_ylabel(y_var)
+
+    plt.gcf().set_size_inches(2, 2)
+
+    plt.savefig(f"{RPATH}/MultiOmics_Skin_{f}_regression_{y_var}.pdf", bbox_inches="tight")
+    plt.savefig(f"{RPATH}/MultiOmics_Skin_{f}_regression_{y_var}.png", bbox_inches="tight", dpi=600)
+    plt.close("all")

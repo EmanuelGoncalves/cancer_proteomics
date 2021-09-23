@@ -20,24 +20,9 @@
 
 import logging
 import numpy as np
-import pandas as pd
 import pkg_resources
-import seaborn as sns
-import numpy.ma as ma
-import itertools as it
 import matplotlib.pyplot as plt
-from natsort import natsorted
-from crispy.GIPlot import GIPlot
-from adjustText import adjust_text
-from crispy.MOFA import MOFA, MOFAPlot
-from crispy.Enrichment import Enrichment
-from crispy.CrispyPlot import CrispyPlot
-from scipy.stats import pearsonr, spearmanr
-from sklearn.mixture import GaussianMixture
-from statsmodels.stats.multitest import multipletests
-from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-from cancer_proteomics.notebooks import DataImport, two_vars_correlation, PALETTE_TTYPE
-from crispy.DataImporter import CORUM, BioGRID, PPI, HuRI
+from cancer_proteomics.notebooks import DataImport, PALETTE_TTYPE
 
 
 LOG = logging.getLogger("cancer_proteomics")
@@ -52,12 +37,11 @@ RPATH = pkg_resources.resource_filename("cancer_proteomics", "plots/DIANN/")
 # Read samplesheet
 ss = DataImport.read_samplesheet()
 
-plot_df = ss.sort_values(["Tissue_type", "replicates_correlation"])
+# Generate plot dataframe
+plot_df = ss.dropna(subset=["Tissue_type", "replicates_correlation"]).sort_values(["Tissue_type", "replicates_correlation"])
 plot_df.Tissue_type = plot_df.Tissue_type.astype("category")
 plot_df.Tissue_type.cat.set_categories(ss["Tissue_type"].value_counts().index, inplace=True)
-plot_df = plot_df.sort_values(
-    ["Tissue_type", "replicates_correlation"], ascending=[True, False]
-).reset_index()
+plot_df = plot_df.sort_values(["Tissue_type", "replicates_correlation"], ascending=[True, False]).reset_index()
 
 theta = np.linspace(0.0, 2 * np.pi, plot_df.shape[0], endpoint=False)
 width = (2 * np.pi) / plot_df.shape[0]
@@ -66,12 +50,12 @@ fig, ax = plt.subplots(1, 1, figsize=(3, 3), dpi=600, subplot_kw=dict(polar=True
 
 for t, df_t in plot_df.groupby("Tissue_type"):
     ax.bar(
-        theta[df_t.index],
-        df_t["replicates_correlation"],
-        width=width,
-        fc=PALETTE_TTYPE[t],
-        linewidth=.0005,
-        label=f"{t} (N={df_t.shape[0]})"
+        x=theta[df_t.index],
+        height=df_t["replicates_correlation"].values,
+        width=[width] * df_t.shape[0],
+        linewidth=[.0005] * df_t.shape[0],
+        facecolor=PALETTE_TTYPE[t],
+        label=f"{t} (N={df_t.shape[0]})",
     )
 
 ax.set_theta_zero_location("N")
@@ -92,7 +76,5 @@ ax.set_title(f"Cancer cell lines proteomics (N={plot_df.shape[0]})")
 plt.legend(frameon=False, prop={"size": 4}, loc="center left", bbox_to_anchor=(1, 0.5))
 
 plt.savefig(f"{RPATH}/SampleOverview_replicates_radialplot.pdf", bbox_inches="tight")
-plt.savefig(
-    f"{RPATH}/SampleOverview_replicates_radialplot.png", bbox_inches="tight", dpi=600
-)
+plt.savefig(f"{RPATH}/SampleOverview_replicates_radialplot.png", bbox_inches="tight")
 plt.close("all")

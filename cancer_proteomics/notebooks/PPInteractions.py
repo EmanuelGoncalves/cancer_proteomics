@@ -31,6 +31,7 @@ from natsort import natsorted
 from crispy.GIPlot import GIPlot
 from scipy.stats import pearsonr, spearmanr
 from sklearn.metrics import auc
+from sklearn.preprocessing import scale
 from statsmodels.stats.multitest import multipletests
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from cancer_proteomics.notebooks import DataImport
@@ -183,7 +184,7 @@ df_corr["merged_pvalue"] = df_corr[
 
 # Export
 df_corr.to_csv(f"{TPATH}/PPInteractions_DIANN.csv.gz", compression="gzip", index=False)
-# df_corr = pd.read_csv(f"{TPATH}/PPInteractions.csv.gz")
+# df_corr = pd.read_csv(f"{TPATH}/PPInteractions_DIANN.csv.gz")
 
 # ECDF
 #
@@ -192,7 +193,7 @@ pal = sns.color_palette("tab10").as_hex()
 _, ax = plt.subplots(1, 1, figsize=(2, 1.5), dpi=600)
 
 for i, n in enumerate(["prot", "gexp", "crispr"]):
-    sns.ecdfplot(df_corr.query("nobs > 60")[f"{n}_corr"], color=pal[i], label=f"{n}", ax=ax)
+    sns.ecdfplot(df_corr.query("nobs > 300")[f"{n}_corr"], color=pal[i], label=f"{n}", ax=ax)
     f"{n}={sum(df_corr[f'{n}_corr'].abs() > .5)}"
 
 ax.set_xlabel("Protein-protein correlations\n(Pearson's r)")
@@ -231,6 +232,8 @@ for n in ["prot", "gexp", "crispr"]:
 
 # ### Define novel PPIs
 novel_ppis = df_corr.query(f"(prot_fdr < .05) & (prot_corr > 0.5)")
+
+novel_ppis.query(f"(prot_corr > 0.8) & (corum != 1) & (biogrid != 1) & (huri != 1) & (string != 1)")
 
 # Export
 ppis = df_corr[(df_corr["prot_corr"].abs() > .5) | (df_corr["gexp_corr"].abs() > .5) | (df_corr["crispr_corr"].abs() > .5)]
@@ -287,6 +290,13 @@ plot_df = pd.DataFrame(
         for ds in rc_dict[db]
     ]
 )
+
+plot_df.assign(file="original").to_csv(
+    f"{RPATH}/PPInteractions_recall_df_original.csv"
+)
+# plot_df = pd.read_csv(f"{RPATH}/PPInteractions_recall_df_original.csv")
+
+plot_df.query("dtype == 'prot'")["auc"].sort_values()
 
 hue_order = ["CORUM", "BioGRID", "STRING", "HuRI"]
 

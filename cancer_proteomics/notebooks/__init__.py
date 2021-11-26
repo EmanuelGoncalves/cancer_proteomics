@@ -175,7 +175,7 @@ class DataImport:
         if drug_targets is not None:
             # Machine learning scores
             ml_scores = pd.read_csv(
-                f"{cls.DPATH}/score_dl_min300_ic50_eg_id_20210830.csv", index_col=0
+                f"{cls.DPATH}/score_dl_min300_ic50_eg_id_20211005.csv", index_col=0
             )["corr"]
             table["r2"] = ml_scores.reindex(table["y_id"]).values
 
@@ -193,7 +193,7 @@ class DataImport:
         else:
             # Machine learning scores
             ml_scores = pd.read_csv(
-                f"{cls.DPATH}/score_dl_crispr_protein_20210830.csv", index_col=0
+                f"{cls.DPATH}/score_dl_crispr_protein_20211005.csv", index_col=0
             )["corr"]
             table["r2"] = ml_scores.reindex(table["y_id"]).values
 
@@ -230,7 +230,7 @@ class DataImport:
 
         # Import manifest
         manifest = pd.read_csv(
-            f"{cls.DPATH}/E0022_P06_final_sample_map.txt", index_col=0, sep="\t"
+            f"{cls.DPATH}/e0022_diann_051021_sample_mapping_averaged.txt", index_col=0, sep="\t"
         )
 
         # Remove excluded samples
@@ -243,7 +243,7 @@ class DataImport:
     def read_protein_matrix_unfiltered(cls, prot_file, map_protein=False):
         protein = pd.read_csv(f"{cls.DPATH}/{prot_file}", sep="\t", index_col=0).T
 
-        protein = protein.drop(index=["RT-Kit-WR", "ProCal", "RMISv2"])
+        protein = protein.drop(index=["RT-Kit-WR", "ProCal", "RMISv2"], errors="ignore")
 
         protein.columns = [c.split(";")[0] for c in protein]
         protein.index = [c.split(";")[1] for c in protein.index]
@@ -265,9 +265,7 @@ class DataImport:
         """
         # Read protein level normalised intensities
         protein = pd.read_csv(
-            # f"{cls.DPATH}/E0022_P06_Protein_Matrix_ProNorM_STR_failed_removed.csv.gz",
-            # f"{cls.DPATH}/e0022_diann_protein_matrix_pronorm_210721_corrected.txt.gz",
-            f"{cls.DPATH}/e0022_diann_protein_matrix_270821_normalised_averaged.txt.gz",
+            f"{cls.DPATH}/e0022_diann_051021_working_matrix_averaged.txt",
             sep="\t",
             index_col=0,
         ).T

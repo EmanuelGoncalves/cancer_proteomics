@@ -71,7 +71,7 @@ ax.grid(True, ls="-", lw=0.0, alpha=1.0, zorder=3, c="black", axis="x")
 ax.set_ylabel("Mean replicate correlation\n(Pearson's R)", fontsize=6)
 ax.yaxis.set_zorder(10)
 
-ax.set_title(f"Cancer cell lines proteomics (N={plot_df.shape[0]})")
+# ax.set_title(f"Cancer cell lines proteomics (N={plot_df.shape[0]})")
 
 plt.legend(frameon=False, prop={"size": 4}, loc="center left", bbox_to_anchor=(1, 0.5))
 

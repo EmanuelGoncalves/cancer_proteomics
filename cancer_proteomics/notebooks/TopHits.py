@@ -59,8 +59,8 @@ dmaxc = dmaxc.reindex(drespo.index)
 
 # LM associations
 #
-lm_drug = pd.read_csv(f"{TPATH}/lm_sklearn_degr_drug_annotated_DIANN.csv.gz")
-lm_crispr = pd.read_csv(f"{TPATH}/lm_sklearn_degr_crispr_annotated_DIANN.csv.gz")
+lm_drug = pd.read_csv(f"{TPATH}/lm_sklearn_degr_drug_annotated_diann_051021.csv.gz")
+lm_crispr = pd.read_csv(f"{TPATH}/lm_sklearn_degr_crispr_annotated_diann_051021.csv.gz")
 
 # Selective and predictive dependencies
 #
@@ -134,7 +134,8 @@ for i, (n, m, c) in enumerate(plot_info):
     )
 
     ax.grid(axis="both", lw=0.1, color="#e1e1e1", zorder=0)
-    ax.axhline(R2_THRES, c=CrispyPlot.PAL_DTRACE[1], lw=0.3, ls="--", zorder=2)
+    ax.axhline(R2_THRES, c="black", lw=0.3, ls="--", zorder=2)
+    ax.axvline(-2 if n == "CRISPR-Cas9" else -1, c="black", lw=0.3, ls="--", zorder=2)
 
     plt.savefig(
         f"{RPATH}/TopHits_selectivity_predictive_scatter_{n}.pdf", bbox_inches="tight"
@@ -367,7 +368,7 @@ pal = {"NA": "#e1e1e1", 0: CrispyPlot.PAL_DTRACE[1], "LumB": '#1f77b4', "Her2": 
 
 # BSG ~ FOXA1 scatter
 g = GIPlot.gi_regression_marginal(
-    "FOXA1", "BSG", "pam50",
+    "BSG", "FOXA1", "pam50",
     plot_df,
     discrete_pal=pal,
     legend_title="Breast - PAM50",

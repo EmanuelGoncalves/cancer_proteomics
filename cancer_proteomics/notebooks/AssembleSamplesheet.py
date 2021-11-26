@@ -2,7 +2,6 @@
 # Copyright (C) 2021 Emanuel Goncalves
 
 import h5py
-import gseapy
 import logging
 import numpy as np
 import pandas as pd
@@ -21,8 +20,12 @@ RPATH = pkg_resources.resource_filename("cancer_proteomics", "plots/")
 
 # Cell line information
 sinfo = pd.read_csv(
-    f"{DPATH}/e0022_diann_mapping_file_100921_averaged.txt.gz", sep="\t"
+    f"{DPATH}/e0022_diann_051021_sample_mapping_averaged.txt", sep="\t"
 )
+
+# Add Haem lineage
+haem_lineage = pd.read_excel(f"{DPATH}/Hematopoietic_080321.xlsx", index_col=1)
+sinfo["Haem_lineage"] = haem_lineage.reindex(sinfo["SIDM"])["Lineage"].values
 
 # Cell Model Passports mapping
 cmp = DataImport.read_cmp_samplesheet()
@@ -43,12 +46,12 @@ sinfo["size"] = ss_deprecated.loc[sinfo["SIDM"].values, "size"].values
 sinfo["media"] = ss_deprecated.loc[sinfo["SIDM"].values, "media"].values
 
 # Replicates correlation
-prot_reps_map = pd.read_csv(f"{DPATH}/e0022_diann_mapping_file_100921_replicate.txt.gz", sep="\t")
+prot_reps_map = pd.read_csv(f"{DPATH}/e0022_diann_051021_sample_mapping_replicates.txt", sep="\t")
 prot_reps_map = prot_reps_map.loc[[not i.startswith("Control_HEK293T") for i in prot_reps_map["Project_Identifier"]]]
 prot_reps_map = prot_reps_map[["Automatic_MS_filename", "Project_Identifier"]]
 
 prot_reps = pd.read_csv(
-    f"{DPATH}/e0022_diann_protein_matrix_270821_normalised_replicate.txt.gz",
+    f"{DPATH}/e0022_diann_051021_frozen_matrix.txt",
     sep="\t",
     index_col=0,
 ).T
@@ -151,16 +154,18 @@ factors = MOFA.get_factors(mofa_file)
 sinfo = pd.concat([sinfo.set_index("SIDM"), factors], axis=1)
 sinfo = sinfo.reset_index().rename(columns=dict(index="model_id"))
 
+
 # Export
 ms_info = pd.read_csv(
     f"{DPATH}/e0022_diann_mapping_file_100921_replicate.txt.gz", sep="\t"
-)
+).drop(columns=["Code", "Daisy_chain", "Replicate"], errors="ignore")
 
 legend = pd.DataFrame([
   dict(Field="model_id", Description="Cell line identifier (CellModelPassport)"),
   dict(Field="Project_Identifier", Description="Cell line project identifier"),
   dict(Field="Cell_line", Description="Cell line name"),
   dict(Field="Tissue_type", Description="Cell line tissue of origin"),
+  dict(Field="Haem_lineage", Description="Lineage of haematopoietic and Lymphoid cell lines"),
   dict(Field="Cancer_type", Description="Cell line cancer type"),
   dict(Field="Cancer_subtype", Description="Cell line cancer subtype"),
   dict(Field="BROAD_ID", Description="Cell line BROAD ID"),

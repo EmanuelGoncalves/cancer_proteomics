@@ -53,8 +53,11 @@ RPATH = pkg_resources.resource_filename("cancer_proteomics", "plots/DIANN/")
 ss = DataImport.read_samplesheet()
 
 # Read proteomics (Proteins x Cell lines)
-# prot_file="e0022_diann_maxlfq_fdr_norm_protein_matrix.txt",
-prot_file = "e0022_maxlfq_pronorm_protein_matrix.txt"
+# prot_file = "e0022_diann_maxlfq_fdr_norm_protein_matrix.txt"
+# prot_file = "e0022_maxlfq_pronorm_protein_matrix.txt"
+# prot_file = "e0022_maxlfq_pronorm_protein_matrix_300921_multiple_hits.txt"
+prot_file = "e0022_maxlfq_diann_protein_matrix_300921_multiple_hits.txt"
+# prot_file = "e0022_maxlfq_pronorm_protein_matrix_300921.txt"
 prot = DataImport.read_protein_matrix_unfiltered(prot_file, map_protein=True)
 
 # Read Transcriptomics
@@ -187,6 +190,7 @@ df_corr["merged_pvalue"] = df_corr[
 df_corr.to_csv(
     f"{TPATH}/PPInteractions_{prot_file}.csv.gz", compression="gzip", index=False
 )
+# df_corr = pd.read_csv(f"{TPATH}/PPInteractions_{prot_file}.csv.gz")
 
 
 #
@@ -305,6 +309,8 @@ plot_df = pd.DataFrame(
     ]
 )
 
+plot_df.assign(file=prot_file).to_csv(f"{RPATH}/PPInteractions_recall_df_{prot_file}.csv")
+
 hue_order = ["corum", "biogrid", "string", "huri"]
 
 _, ax = plt.subplots(1, 1, figsize=(3, 1.5), dpi=600)
@@ -338,5 +344,40 @@ plt.savefig(
 )
 plt.savefig(
     f"{RPATH}/PPInteractions_roc_barplot_overlap_{prot_file}.png", bbox_inches="tight"
+)
+plt.close("all")
+
+# Comparison recall curves
+comparisonFiles = [
+    dict(name="original", file="PPInteractions_recall_df_original.csv"),
+    dict(name="diann_maxlfq_fdr_norm", file="PPInteractions_recall_df_e0022_diann_maxlfq_fdr_norm_protein_matrix.txt.csv"),
+    dict(name="maxlfq_pronorm", file="PPInteractions_recall_df_e0022_maxlfq_pronorm_protein_matrix.txt.csv"),
+    dict(name="maxlfq_pronorm_multiple_hits", file="PPInteractions_recall_df_e0022_maxlfq_pronorm_protein_matrix_300921_multiple_hits.txt.csv"),
+    dict(name="maxlfq_diann_multiple_hits", file="PPInteractions_recall_df_e0022_maxlfq_diann_protein_matrix_300921_multiple_hits.txt.csv"),
+    dict(name="maxlfq_pronorm_300921", file="PPInteractions_recall_df_e0022_maxlfq_pronorm_protein_matrix_300921.txt.csv"),
+]
+
+comparisonDataframe = pd.concat([
+    pd.read_csv(f"{RPATH}/{f['file']}", index_col=0).assign(matrix=f["name"]) for f in comparisonFiles
+], ignore_index=True)
+
+
+g = sns.catplot(
+    x="auc",
+    y="ppi",
+    hue="matrix",
+    kind="bar",
+    orient="h",
+    col="dtype",
+    data=comparisonDataframe,
+)
+
+# ax.grid(True, ls="-", lw=0.1, alpha=1.0, zorder=0, axis="x")
+
+plt.savefig(
+    f"{RPATH}/PPInteractions_roc_barplot_comparison.pdf", bbox_inches="tight"
+)
+plt.savefig(
+    f"{RPATH}/PPInteractions_roc_barplot_comparison.png", bbox_inches="tight"
 )
 plt.close("all")

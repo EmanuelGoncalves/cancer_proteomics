@@ -28,6 +28,7 @@ from crispy.GIPlot import GIPlot
 from crispy.LMModels import LModel
 from crispy.MOFA import MOFA, MOFAPlot
 from crispy.Enrichment import Enrichment
+from sklearn.preprocessing import scale
 from cancer_proteomics.notebooks import DataImport, two_vars_correlation, PALETTE_TTYPE
 
 
@@ -44,7 +45,8 @@ RPATH = pkg_resources.resource_filename("cancer_proteomics", "plots/DIANN/")
 ss = DataImport.read_samplesheet()
 
 # Read proteomics (Proteins x Cell lines)
-prot = DataImport.read_protein_matrix(map_protein=True, min_measurements=3)
+prot = DataImport.read_protein_matrix(map_protein=True, min_measurements=60)
+prot = pd.DataFrame(scale(prot.T), index=prot.columns, columns=prot.index).T
 
 # Read proteomics BROAD (Proteins x Cell lines)
 prot_broad = DataImport.read_protein_matrix_broad()
@@ -156,7 +158,7 @@ plt.close("all")
 
 # ### Overview heatmap
 # Tissue-specific proteins
-tissue_proteins = pd.read_csv(f"{DPATH}/Tissue_specific_proteins.txt", sep="\t")
+tissue_proteins = pd.read_csv(f"{DPATH}/tissue_specific_protein_list.txt", sep="\t")
 tissue_proteins["id"] = tissue_proteins["Protein"].apply(lambda v: v.split(";")[1]).values
 tissue_proteins["GeneSymbol"] = DataImport.map_gene_name().reindex(tissue_proteins["id"])["GeneSymbol"].values
 
@@ -236,7 +238,7 @@ for plot_df, ratio, name in [
     df.index = [i.split("_")[1] for i in df.index]
     sns.heatmap(
         df,
-        cmap="RdGy",
+        cmap=sns.diverging_palette(240, 10, as_cmap=True, sep=100),
         center=0,
         annot=True,
         cbar=False,
@@ -286,7 +288,7 @@ for z in ["VIM_proteomics", "CDH1_proteomics"]:
 
 
 # ### MOFA Factor 11
-f = "F11"
+f = "F12"
 
 # GSEA enrichment plot
 enr_obj = Enrichment(dict(tissue=gmts), sig_min_len=10, permutations=int(1e4))
@@ -323,10 +325,10 @@ pal = {
 pal_order = ["Other", "Skin"]
 
 for y_var in ["1373;Dabrafenib;GDSC2", "BRAF"]:
-    df = plot_df.dropna(subset=["F11", y_var, "Skin"])
+    df = plot_df.dropna(subset=[f, y_var, "Skin"])
 
     g = GIPlot.gi_regression_marginal(
-        x="F11",
+        x=f,
         y=y_var,
         z="Skin",
         plot_df=df,
@@ -337,7 +339,7 @@ for y_var in ["1373;Dabrafenib;GDSC2", "BRAF"]:
     )
 
     sns.scatterplot(
-        x="F11",
+        x=f,
         y=y_var,
         hue="Skin",
         hue_order=pal_order,
@@ -349,7 +351,7 @@ for y_var in ["1373;Dabrafenib;GDSC2", "BRAF"]:
         ax=g.ax_joint,
     )
 
-    g.ax_joint.set_xlabel(f"Factor 11")
+    g.ax_joint.set_xlabel(f"Factor {f[1:]}")
     g.ax_joint.set_ylabel(y_var)
 
     plt.gcf().set_size_inches(2, 2)
@@ -357,3 +359,13 @@ for y_var in ["1373;Dabrafenib;GDSC2", "BRAF"]:
     plt.savefig(f"{RPATH}/MultiOmics_Skin_{f}_regression_{y_var}.pdf", bbox_inches="tight")
     plt.savefig(f"{RPATH}/MultiOmics_Skin_{f}_regression_{y_var}.png", bbox_inches="tight", dpi=600)
     plt.close("all")
+
+##
+f = "F6"
+f_drugs = pd.concat([
+    mofa.weights["drespo"][f].sort_values(ascending=False),
+    dtargets,
+], axis=1).dropna(subset=[f])
+f_drugs.to_csv(f"{TPATH}/Factor_{f}_drug_loadings.csv")
+
+mofa.weights["proteomics"][f].sort_values().to_csv(f"{TPATH}/Factor_{f}_protein_loadings.csv")

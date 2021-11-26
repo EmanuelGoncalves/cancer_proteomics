@@ -67,14 +67,14 @@ crispr = DataImport.read_crispr_matrix()
 ppis = pd.read_csv(f"{TPATH}/PPInteractions.csv.gz")
 
 # Hits
-lm_drug = pd.read_csv(f"{TPATH}/lm_sklearn_degr_drug_annotated_DIANN.csv.gz")
-lm_crispr = pd.read_csv(f"{TPATH}/lm_sklearn_degr_crispr_annotated_DIANN.csv.gz")
+lm_drug = pd.read_csv(f"{TPATH}/lm_sklearn_degr_drug_annotated_diann_051021.csv.gz")
+lm_crispr = pd.read_csv(f"{TPATH}/lm_sklearn_degr_crispr_annotated_diann_051021.csv.gz")
 
 #
 #
 for dtype, lm_df in [
     ("Drug-Protein", lm_drug.query("n > 60")),
-    ("CRISPR-Protein", lm_crispr.query("n > 60")),
+    # ("CRISPR-Protein", lm_crispr.query("n > 60")),
 ]:
     for pvar in ["nc_pval", "pval"]:
         # dtype, lm_df, pvar = "Drug-Protein", lm_drug, "nc_pval"
@@ -124,7 +124,7 @@ for dtype, lm_df in [
 
         ax.set_xlabel("P-value expected (-log10)")
         ax.set_ylabel("P-value observed (-log10)")
-        ax.set_title("CRISPR-Protein associations")
+        ax.set_title(f"{dtype} associations")
 
         plt.savefig(f"{RPATH}/LM_qqplot_{dtype}_{pvar}.pdf", bbox_inches="tight")
         plt.savefig(

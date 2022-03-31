@@ -1,6 +1,6 @@
 """
 Train DeepOmicNet for down sampling analysis (drug response only)
-python deepomicnet_downsample.py configs/drug/downsample/DL/downsample_3000.json
+python deepomicnet_downsample.py configs/drug/downsample/DL/downsample_general.json 2000
 
 """
 from sklearn.model_selection import KFold
@@ -13,16 +13,20 @@ import pandas as pd
 from radam import RAdam
 from torch.utils.data import DataLoader
 
-from deepominnet_model import *
+from multi_drug_model import *
 
 STAMP = datetime.today().strftime('%Y%m%d%H%M')
 
 config_file = sys.argv[1]
 # load model configs
 configs = json.load(open(config_file, 'r'))
+if len(sys.argv) > 2:
+    for key in configs:
+        if type(configs[key]) == str:
+            configs[key] = configs[key].replace('<num_protein>', sys.argv[2])
 
 log_suffix = ''
-if configs['model'] == 'DeepOmicNet':
+if configs['model'] == 'MultiDrugResNN':
     log_suffix += "_res"
 else:
     log_suffix += "_resx"
@@ -69,12 +73,12 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
 def get_setup():
-    if 'model' in configs and configs['model'] == 'DeepOmicNet':
-        model = DeepOmicNet(train_df.shape[1], train_ic50.shape[1],
+    if 'model' in configs and configs['model'] == 'MultiDrugResNN':
+        model = MultiDrugResNN(train_df.shape[1], train_ic50.shape[1],
                                configs['hidden_width'], configs['hidden_size'])
 
     else:
-        model = DeepOmicNetG(train_df.shape[1], train_ic50.shape[1],
+        model = MultiDrugResXNN(train_df.shape[1], train_ic50.shape[1],
                                 configs['hidden_width'], configs['hidden_size'], group=configs['group'])
     model = model.to(device)
 
@@ -115,8 +119,29 @@ for run_name in downsample_df.columns:
 
     if configs['data_type'] in ['protein', 'protein_rep', 'rna_common', 'multiomic', 'peptide']:
         data_sample = pd.read_csv(data_file, sep='\t', index_col=0)
-        data_sample = data_sample[proteins].reset_index()
+
+        data_sample = data_sample[proteins]
+        if 'missing_simulate' in configs:
+            logger.info(
+                f"matrix missing ratio: {data_sample.isna().sum().sum() / (data_sample.shape[0] * data_sample.shape[1])}")
+            print(
+                f"matrix missing ratio: {data_sample.isna().sum().sum() / (data_sample.shape[0] * data_sample.shape[1])}")
+            data_sample = data_sample.mask(np.random.choice([True, False], size=data_sample.shape,
+                                                            p=[configs['missing_simulate'],
+                                                               1 - configs['missing_simulate']]))
+            logger.info(
+                f"matrix missing ratio: {data_sample.isna().sum().sum() / (data_sample.shape[0] * data_sample.shape[1])}")
+            print(
+                f"matrix missing ratio: {data_sample.isna().sum().sum() / (data_sample.shape[0] * data_sample.shape[1])}")
+        data_sample = data_sample.reset_index()
+
     elif configs['data_type'] == 'rna':
+        name_map_df = pd.read_csv(f"/home/scai/SangerDrug/data/misc/uniprot_human_idmap.tab.gz",
+                                  sep='\t')
+        name_map_dict = name_map_df.set_index("Entry name").to_dict()['Gene names  (primary )']
+        protein2rna_map = name_map_dict
+        rna2protein_map = name_map_df.set_index("Gene names  (primary )").to_dict()['Entry name']
+
         data_raw = pd.read_csv(data_file, index_col=0).T
         data_raw.index.name = 'SIDM'
         data_raw = data_raw.reset_index()
@@ -125,17 +150,25 @@ for run_name in downsample_df.columns:
         data_sample = data_sample.sort_values(by=['Cell_line'])
         data_sample = data_sample.set_index(['Cell_line'])
 
-        name_map = pd.read_csv("/home/scai/SangerDrug/data/misc/HUMAN_9606_idmapping.gene_prot.dat",
-                               sep='\t',
-                               names=['ID', 'type', 'code'])
-        name_map = name_map.drop_duplicates(['ID', 'type'])
-        name_map = pd.pivot(name_map, index='ID', columns='type', values='code').dropna()
-        protein2rna_map = dict(zip(name_map['UniProtKB-ID'].values, name_map['Gene_Name'].values))
-        rna2protein_map = {v: k for k, v in protein2rna_map.items()}
-        genes = [protein2rna_map[x] for x in proteins]
-        genes = list(set(genes).intersection(data_sample.columns))
+        if '_HUMAN' in proteins[0]:
+            logger.info("converting to gene names.")
+            proteins = [protein2rna_map[x] for x in proteins if x in protein2rna_map]
+            proteins = list(set(proteins).intersection(data_sample.columns))
 
-        data_sample = data_sample[genes].reset_index()
+        data_sample = data_sample[proteins]
+        data_sample = data_sample.reset_index()
+
+        # name_map = pd.read_csv("/home/scai/SangerDrug/data/misc/HUMAN_9606_idmapping.gene_prot.dat",
+        #                        sep='\t',
+        #                        names=['ID', 'type', 'code'])
+        # name_map = name_map.drop_duplicates(['ID', 'type'])
+        # name_map = pd.pivot(name_map, index='ID', columns='type', values='code').dropna()
+        # protein2rna_map = dict(zip(name_map['UniProtKB-ID'].values, name_map['Gene_Name'].values))
+        # rna2protein_map = {v: k for k, v in protein2rna_map.items()}
+        # genes = [protein2rna_map[x] for x in proteins]
+        # genes = list(set(genes).intersection(data_sample.columns))
+        #
+        # data_sample = data_sample[genes].reset_index()
     elif configs['data_type'].lower() in ('wes', 'cna', 'methylation'):
         data_sample = pd.read_csv(data_file)
     else:
@@ -264,5 +297,5 @@ for run_name in downsample_df.columns:
                                      val_score_dict=val_score_dict)
     if 'save_scores' not in configs or configs['save_scores']:
         val_score_df = pd.DataFrame(val_score_dict)
-        val_score_df.to_csv(f"{configs['work_dir']}/scores_{STAMP}{log_suffix}_{run_name}.csv", index=False)
+        val_score_df.to_csv(f"{configs['work_dir']}/scores_{STAMP}{log_suffix}_{run_name}.csv.gz", index=False)
     logger.info("Full training finished.")

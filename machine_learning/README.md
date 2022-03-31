@@ -1,12 +1,12 @@
 # Machine learning
 
-This folder contains the code for the machine learning analysis, including DeepOmicNet and other machine learning models used in the benchmarking analysis (FigS3c).
+This folder contains the code for the machine learning analysis, including DeepOmicNet and other machine learning models used in the benchmarking analysis.
 
 ## DeepOmicNet
 
-![image-20220331110835124](/Users/scai/Library/Application Support/typora-user-images/image-20220331110835124.png)
+![image-20220331110835124](./figures/model.png)
 
-![image-20220331110853235](/Users/scai/Library/Application Support/typora-user-images/image-20220331110853235.png)
+![image-20220331110853235](./figures/benchmarking.png)
 
 DeepOmicNet uses following techniques to provide superior predictive performance than tranditional machine learning models, including elastic net and random forest, across multiple omics layers, including WES, copy number, tissue, methylation, transcriptome and proteome data.
 

@@ -2,13 +2,17 @@
 <module type="PYTHON_MODULE" version="4">
   <component name="NewModuleRootManager">
     <content url="file://$MODULE_DIR$">
-      <excludeFolder url="file://$MODULE_DIR$/data" />
-      <excludeFolder url="file://$MODULE_DIR$/reports_test" />
-      <excludeFolder url="file://$MODULE_DIR$/ssGSEA_" />
-      <excludeFolder url="file://$MODULE_DIR$/submission" />
+      <excludeFolder url="file://$MODULE_DIR$/venv" />
       <excludeFolder url="file://$MODULE_DIR$/tables" />
+      <excludeFolder url="file://$MODULE_DIR$/submission" />
+      <excludeFolder url="file://$MODULE_DIR$/ssGSEA_" />
+      <excludeFolder url="file://$MODULE_DIR$/data" />
+      <excludeFolder url="file://$MODULE_DIR$/figures" />
+      <excludeFolder url="file://$MODULE_DIR$/landscape_analysis" />
+      <excludeFolder url="file://$MODULE_DIR$/machine_learning" />
+      <excludeFolder url="file://$MODULE_DIR$/reports_test" />
     </content>
-    <orderEntry type="jdk" jdkName="Python 3.8.5 (proteomics)" jdkType="Python SDK" />
+    <orderEntry type="jdk" jdkName="Python 3.9 (py39)" jdkType="Python SDK" />
     <orderEntry type="sourceFolder" forTests="false" />
   </component>
 </module>

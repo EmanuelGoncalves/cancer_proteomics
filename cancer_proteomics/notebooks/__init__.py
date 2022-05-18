@@ -215,7 +215,7 @@ class DataImport:
         :return:
         """
         return pd.read_excel(
-            f"{cls.DPATH}/SupplementaryTable1.xlsx", index_col=0, sheet_name="Cell lines"
+            f"{cls.DPATH}/SupplementaryTable1.xlsx", index_col=0, sheet_name="Table S1a"
         )
 
     @classmethod
@@ -531,6 +531,31 @@ class DataImport:
         dtargets = dtargets.fillna(np.nan)
 
         return dtargets
+
+    @classmethod
+    def read_metabolomics(cls, subset=None):
+        # Import metabolomics
+        metabolomics = pd.read_excel(
+            f"{cls.DPATH}/CCLE_METABOLOMICS_41591_2019_404_MOESM2_ESM.xlsx", sheet_name="1-clean data", index_col=0
+        ).T
+
+        # Preserving NaNs
+        metabolomics_nans = pd.read_excel(
+            f"{cls.DPATH}/CCLE_METABOLOMICS_41591_2019_404_MOESM2_ESM.xlsx", sheet_name="1-raw data", index_col=0
+        ).T.reindex(index=metabolomics.index, columns=metabolomics.columns)
+
+        metabolomics[metabolomics_nans.isna()] = np.nan
+
+        # ID mapping
+        idmap = cls.read_cmp_samplesheet()
+        idmap = idmap.reset_index().dropna(subset=["CCLE_ID", "model_id"]).set_index("CCLE_ID")["model_id"]
+
+        metabolomics = metabolomics.rename(columns=idmap)
+
+        if subset is not None:
+            metabolomics = metabolomics.loc[:, metabolomics.columns.isin(subset)]
+
+        return metabolomics
 
     @classmethod
     def read_methylation_matrix(cls, subset=None):

@@ -33,11 +33,13 @@ from crispy.CrispyPlot import CrispyPlot
 from sklearn.mixture import GaussianMixture
 from statsmodels.stats.multitest import multipletests
 from cancer_proteomics.notebooks import DataImport, two_vars_correlation
+from crispy.DataImporter import CORUM
 
 
 LOG = logging.getLogger("cancer_proteomics")
 DPATH = pkg_resources.resource_filename("data", "/")
 TPATH = pkg_resources.resource_filename("tables", "/")
+PPIPATH = pkg_resources.resource_filename("data", "ppi/")
 RPATH = pkg_resources.resource_filename("cancer_proteomics", "plots/DIANN/")
 
 
@@ -149,12 +151,8 @@ patt_corr = pd.DataFrame(
     {
         g: pd.concat(
             [
-                pd.Series(two_vars_correlation(cnv.loc[g], prot.loc[g])).add_prefix(
-                    "prot_"
-                ),
-                pd.Series(two_vars_correlation(cnv.loc[g], gexp.loc[g])).add_prefix(
-                    "gexp_"
-                ),
+                pd.Series(two_vars_correlation(cnv.loc[g], prot.loc[g])).add_prefix("prot_"),
+                pd.Series(two_vars_correlation(cnv.loc[g], gexp.loc[g])).add_prefix("gexp_"),
             ]
         )
         for g in genes
@@ -172,29 +170,27 @@ patt_corr["cluster"] = [
     "High" if s_type[p] == clusters.argmax() else "Low" for p in patt_corr.index
 ]
 
+# Annotate with CORUM information
+corum_db = CORUM(ddir=PPIPATH)
+
+corum_db = corum_db.db.copy()
+corum_db["subunits"] = corum_db["subunits(Gene name)"].apply(lambda v: set(v.split(";"))).values
+corum_db["complex_id"] = [f"{v1}: {v2}" for v1, v2 in corum_db[["ComplexID", "ComplexName"]].values]
+
+corum = corum_db.set_index("complex_id")["subunits"].to_dict()
+
+patt_corr["CORUM"] = [";".join([c for c in corum if p in corum[c]]) for p in patt_corr.index]
+
+# Sort and export
+patt_corr = patt_corr.sort_values("attenuation", ascending=False)
 patt_corr.to_csv(f"{TPATH}/ProteinAttenuation_attenuation_DIANN.csv.gz", compression="gzip")
 # patt_corr = pd.read_csv(f"{TPATH}/ProteinAttenuation_attenuation.csv.gz", index_col=0)
-
-# Scatter
-g = CrispyPlot.attenuation_scatter("gexp_corr", "prot_corr", patt_corr)
-
-g.set_axis_labels(
-    "Transcriptomics ~ Copy number\n(Pearson's R)",
-    "Protein ~ Copy number\n(Pearson's R)",
-)
-
-plt.savefig(f"{RPATH}/ProteinAttenuation_attenuation_scatter.pdf", bbox_inches="tight")
-plt.savefig(f"{RPATH}/ProteinAttenuation_attenuation_scatter.png", bbox_inches="tight")
-plt.close("all")
-
 
 # ### Pathway enrichement analysis of attenuated proteins
 background = set(patt_corr.index)
 sublist = set(patt_corr.query("cluster == 'High'").index)
 
-enr_obj = Enrichment(
-    gmts=["c5.all.v7.1.symbols.gmt"], sig_min_len=15, padj_method="fdr_bh"
-)
+enr_obj = Enrichment(gmts=["c5.all.v7.1.symbols.gmt"], sig_min_len=15, padj_method="fdr_bh")
 
 enr = enr_obj.hypergeom_enrichments(sublist, background, "c5.all.v7.1.symbols.gmt")
 enr = enr[enr["adj.p_value"] < 0.01].head(30).reset_index()
@@ -244,54 +240,78 @@ plt.savefig(f"{RPATH}/ProteinAttenuation_enrichment.pdf", bbox_inches="tight")
 plt.savefig(f"{RPATH}/ProteinAttenuation_enrichment.png", bbox_inches="tight")
 plt.close("all")
 
+"""
+Attenuation plot
+"""
 # Attenuation scatter gene highlights
-signatures = [
-    "GO_PROTEIN_MODIFICATION_BY_SMALL_PROTEIN_CONJUGATION",
-    "GO_TRANSLATIONAL_INITIATION",
-    "GO_RIBOSOMAL_SUBUNIT",
+complex_attenuation = pd.DataFrame([dict(
+    complex=c, attenuation=a, prot_corr=p, gexp_corr=e, prot_len=n, protein=i
+) for i, l, a, p, e, n in patt_corr.reset_index()[["index", "CORUM", "attenuation", "prot_corr", "gexp_corr", "prot_len"]].values if l != "" for c in l.split(";")])
+
+complex_attenuation = pd.concat([
+    complex_attenuation.groupby("complex")["prot_corr"].median(),
+    complex_attenuation.groupby("complex")["gexp_corr"].median(),
+    complex_attenuation.groupby("complex")["prot_corr"].count().rename("count"),
+    complex_attenuation.groupby("complex")["protein"].agg(set).rename("proteins"),
+], axis=1)
+
+# Data
+signatures_order = [
+    "229: NAT complex",
+    "191: 20S proteasome",
+    "126: CCT complex (chaperonin containing TCP1 complex)",
 ]
 signatures = {
-    s: set(enr_obj.get_signature("c5.all.v7.1.symbols.gmt", s)).intersection(
-        patt_corr.index
-    )
-    for s in signatures
+    s: set(corum_db.query(f"complex_id == '{s}'")["subunits(Gene name)"].iloc[0].split(";"))
+    for s in signatures_order
 }
 
-plot_df = patt_corr.copy()
-plot_df = plot_df.assign(
-    signature=[[s for s in signatures if g in signatures[s]] for g in plot_df.index]
+plot_df = patt_corr.copy().assign(
+    signature=[[s for s in signatures if g in signatures[s]] for g in patt_corr.index]
 )
 plot_df = plot_df.assign(
-    signature=[i[0] if len(i) > 0 else "All" for i in plot_df["signature"]]
+    signature=[i[0] if len(i) > 0 else "Other" for i in plot_df["signature"]]
 )
-
-ax_min = plot_df[["gexp_corr", "prot_corr"]].min().min() * 1.1
-ax_max = plot_df[["gexp_corr", "prot_corr"]].max().max() * 1.1
 
 discrete_pal = pd.Series(
     sns.color_palette("tab10").as_hex()[: len(signatures)], index=signatures
 )
-discrete_pal["All"] = CrispyPlot.PAL_DTRACE[0]
+discrete_pal["Other"] = CrispyPlot.PAL_DTRACE[0]
 
-grid = GIPlot.gi_regression_marginal(
-    "gexp_corr",
-    "prot_corr",
-    "signature",
+# Plot
+g = GIPlot.gi_regression_marginal(
+    "gexp_corr", "prot_corr", "signature",
     plot_df,
+    discrete_pal=discrete_pal.to_dict(),
     plot_reg=False,
     plot_annot=False,
     plot_legend=False,
-    scatter_kws=dict(edgecolor="w", lw=0.1, s=8),
-    discrete_pal=discrete_pal,
+    hue_order=["Other"] + signatures_order,
+    scatter_kws=dict(edgecolor="w", lw=0.1, s=16),
+    base=0.25,
 )
 
-grid.ax_joint.plot([ax_min, ax_max], [ax_min, ax_max], "k--", lw=0.3)
-grid.ax_joint.set_xlim(ax_min, ax_max)
-grid.ax_joint.set_ylim(ax_min, ax_max)
+# Axis labels
+g.ax_joint.set_xlabel("Copy number and Transcriptomics\nPearson's r")
+g.ax_joint.set_ylabel("Copy number and Proteomics\nPearson's r")
 
+# Set axis limits
+ax_min = plot_df[["gexp_corr", "prot_corr"]].min().min() * 1.1
+ax_max = plot_df[["gexp_corr", "prot_corr"]].max().max() * 1.1
+
+g.ax_joint.set_xlim(ax_min, ax_max)
+g.ax_joint.set_ylim(ax_min, ax_max)
+
+g.ax_marg_x.set_xlim(ax_min, ax_max)
+g.ax_marg_y.set_ylim(ax_min, ax_max)
+
+# Plot diagonal
+g.ax_joint.plot([ax_min, ax_max], [ax_min, ax_max], "k--", lw=0.3)
+
+# Plot labels
 labels = [
-    grid.ax_joint.text(row["gexp_corr"], row["prot_corr"], i, color="k", fontsize=6)
-    for i, row in plot_df.query("signature != 'All'")
+    g.ax_joint.text(row["gexp_corr"], row["prot_corr"], i, color="k", fontsize=6)
+    for i, row in plot_df.query("signature != 'Other'")
     .sort_values("attenuation", ascending=False)
     .head(15)
     .iterrows()
@@ -299,28 +319,27 @@ labels = [
 adjust_text(
     labels,
     arrowprops=dict(arrowstyle="-", color="k", alpha=0.75, lw=0.3),
-    ax=grid.ax_joint,
+    ax=g.ax_joint,
 )
 
+# Plot legend
 handles = [
     mpatches.Circle(
         (0.0, 0.0),
         0.25,
         facecolor=discrete_pal[t],
-        label=f"{t[3:].replace('_', ' ').lower()} (N={(plot_df['signature'] == t).sum()})",
+        label=f"{t} (N={(plot_df['signature'] == t).sum()})",
     )
     for t in natsorted(set(plot_df["signature"]))
 ]
 
-grid.ax_joint.legend(
+g.ax_joint.legend(
     handles=handles,
     loc="upper left",
     frameon=False,
 )
 
-grid.ax_joint.set_xlabel("Copy number and Transcriptomics\nPearson's r")
-grid.ax_joint.set_ylabel("Copy number and Proteomics\nPearson's r")
-
+# Set size
 plt.gcf().set_size_inches(2.5, 2.5)
 
 plt.savefig(f"{RPATH}/ProteinTranscript_attenuation_scatter_signatures.pdf", bbox_inches="tight")

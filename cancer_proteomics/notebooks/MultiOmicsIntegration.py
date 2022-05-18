@@ -38,7 +38,6 @@ PPIPATH = pkg_resources.resource_filename("data", "ppi/")
 TPATH = pkg_resources.resource_filename("tables", "/")
 RPATH = pkg_resources.resource_filename("cancer_proteomics", "plots/DIANN/")
 
-
 # ### Imports
 
 # Read samplesheet
@@ -192,7 +191,7 @@ plot_df_supp = pd.concat(
 )
 
 for plot_df, ratio, name in [
-    (plot_df_main.copy(), 2, "Main"),
+    (plot_df_main.copy(), 3, "Main"),
     (plot_df_supp.copy(), 6, "Supp"),
 ]:
     f, axs = plt.subplots(
@@ -200,7 +199,7 @@ for plot_df, ratio, name in [
         1,
         sharex="col",
         sharey="none",
-        gridspec_kw={"height_ratios": [2] * 2 + [ratio] + [4]},
+        gridspec_kw={"height_ratios": [3] * 2 + [ratio] + [3]},
         figsize=(plot_df.shape[1] * 0.22, plot_df.shape[0] * 0.22),
     )
 
@@ -285,6 +284,64 @@ for z in ["VIM_proteomics", "CDH1_proteomics"]:
     plt.savefig(f"{RPATH}/MultiOmics_{f_x}_{f_y}_continous_{z}.pdf", bbox_inches="tight")
     plt.savefig(f"{RPATH}/MultiOmics_{f_x}_{f_y}_continous_{z}.png", bbox_inches="tight", dpi=600)
     plt.close("all")
+
+# Ridge plot VIM proteomics per tissue
+df = plot_df.dropna(subset=["VIM_proteomics", "Tissue_type"])
+
+order = df.groupby("Tissue_type")["VIM_proteomics"].mean().sort_values()
+
+sns.set_theme(style="white", rc={"axes.facecolor": (0, 0, 0, 0)})
+
+g = sns.FacetGrid(
+    df,
+    row="Tissue_type",
+    hue="Tissue_type",
+    row_order=list(order.index),
+
+    aspect=15,
+    height=.5,
+    palette=PALETTE_TTYPE,
+)
+
+g.map(
+    sns.kdeplot,
+    "VIM_proteomics",
+    bw_adjust=.5,
+    clip_on=False,
+    fill=True,
+    alpha=1,
+    linewidth=.5
+)
+# g.map(
+#     sns.kdeplot,
+#     "VIM_proteomics",
+#     clip_on=False,
+#     color="w",
+#     lw=.5,
+#     bw_adjust=.5
+# )
+
+g.refline(y=0, linewidth=0.25, linestyle="-", color=None, clip_on=False)
+
+
+def label(x, color, label):
+    ax = plt.gca()
+    ax.text(0, .2, label, fontweight="bold", color=color,
+            ha="left", va="center", transform=ax.transAxes)
+
+g.map(label, "VIM_proteomics")
+
+g.figure.subplots_adjust(hspace=-.5)
+
+g.set_titles("")
+g.set(yticks=[], ylabel="")
+g.despine(bottom=True, left=True)
+
+g.set_axis_labels(f"VIM proteomics", "")
+
+plt.savefig(f"{RPATH}/MultiOmics_{f_x}_{f_y}_continous_VIM_ridge_plot.pdf", bbox_inches="tight")
+plt.savefig(f"{RPATH}/MultiOmics_{f_x}_{f_y}_continous_VIM_ridge_plot.png", bbox_inches="tight", dpi=600)
+plt.close("all")
 
 
 # ### MOFA Factor 11

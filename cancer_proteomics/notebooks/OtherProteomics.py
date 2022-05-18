@@ -114,13 +114,14 @@ print(f"Frenjo et al. 2020: {prot_frejno.shape}")
 
 ## Correlate samples
 dfs = dict(
-    ccle={"df": prot_ccle, "name": "Broad's CCLE"},
+    ccle={"df": prot_ccle, "name": "Nusinow et al. 2020"},
     coread={"df": prot_coread, "name": "Roumelliotis et al. 2017"},
     nci60={"df": prot_nci60, "name": "Guo et al. 2019"},
     tnbc={"df": prot_tnbc, "name": "Lawrence et al. 2015"},
     frejno={"df": prot_frejno, "name": "Frenjo et al. 2020"},
 )
 
+# Samples correlation
 reps_corr = pd.DataFrame(
     [
         {
@@ -182,3 +183,57 @@ ax.set_ylabel("")
 plt.savefig(f"{RPATH}/OtherProteomics_corr.pdf", bbox_inches="tight")
 plt.savefig(f"{RPATH}/OtherProteomics_corr.png", bbox_inches="tight", dpi=600)
 plt.close("all")
+
+# All versus all
+dfs = dict(
+    ccle={"df": prot_ccle, "name": "Nusinow et al. 2020"},
+    coread={"df": prot_coread, "name": "Roumelliotis et al. 2017"},
+    nci60={"df": prot_nci60, "name": "Guo et al. 2019"},
+    tnbc={"df": prot_tnbc, "name": "Lawrence et al. 2015"},
+    frejno={"df": prot_frejno, "name": "Frenjo et al. 2020"},
+    cmrisanger={"df": protein, "name": "ProCan-DepMapSanger"},
+)
+
+reps_corr = pd.DataFrame(
+    [
+        {
+            **two_vars_correlation(dfs[n1]["df"][c], dfs[n2]["df"][c]),
+            **dict(
+                dataset1=n1,
+                dataset1_name=dfs[n1]["name"],
+                dataset2=n2,
+                dataset2_name=dfs[n2]["name"],
+                cellline=c,
+            ),
+        }
+        for n1 in dfs
+        for n2 in dfs
+        for c in set(dfs[n1]["df"]).intersection(dfs[n2]["df"])
+    ]
+)
+
+reps_corr_m = pd.pivot_table(reps_corr, index="dataset1_name", columns="dataset2_name", values="corr", aggfunc=np.mean)
+
+fig = sns.clustermap(
+    reps_corr_m.replace(np.nan, 0),
+    cmap="RdBu",
+    center=0,
+    annot=True,
+    fmt=".2f",
+    mask=reps_corr_m.isna(),
+    annot_kws={"size": 7},
+    figsize=(4, 4),
+)
+fig.ax_heatmap.set_xlabel("Data-sets")
+fig.ax_heatmap.set_ylabel("Data-sets")
+
+fig.ax_heatmap.set_yticklabels(fig.ax_heatmap.get_yticklabels(), rotation=0)
+
+fig.ax_col_dendrogram.set_title("Mean cell lines pearson's r")
+
+plt.savefig(f"{RPATH}/OtherProteomics_all_clustermap.pdf", bbox_inches="tight")
+plt.savefig(f"{RPATH}/OtherProteomics_all_clustermap.png", bbox_inches="tight", dpi=600)
+plt.close("all")
+
+
+#

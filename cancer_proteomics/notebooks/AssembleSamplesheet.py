@@ -78,6 +78,12 @@ cell_line_corrs = pd.Series(
 
 sinfo["replicates_correlation"] = cell_line_corrs.loc[sinfo["Project_Identifier"].values].values
 
+# Numebr of proteins per cell line
+prot = pd.read_csv(f"{DPATH}/e0022_diann_051021_frozen_matrix_averaged.txt", sep="\t", index_col=0).T
+prot.columns = [c.split(";")[0] for c in prot]
+
+sinfo["number_of_proteins"] = prot.count().loc[sinfo["SIDM"].values].values
+
 # GO term enrichments
 prot = DataImport.read_protein_matrix(map_protein=True, min_measurements=3)
 
@@ -126,16 +132,16 @@ genes = list(
 )
 LOG.info(f"Genes: {len(genes)}; Samples: {len(samples)}")
 
-gexp_t = pd.DataFrame(
-    {i: Utils.gkn(gexp.loc[i].dropna()).to_dict() for i in genes}
-).T
+# gexp_t = pd.DataFrame(
+#     {i: Utils.gkn(gexp.loc[i].dropna()).to_dict() for i in genes}
+# ).T
 
 satt_corr = pd.DataFrame(
     {
         s: dict(
             CNV_Prot=two_vars_correlation(cnv[s], prot[s])["corr"],
-            CNV_GExp=two_vars_correlation(cnv[s], gexp_t[s])["corr"],
-            GExp_Prot=two_vars_correlation(gexp_t[s], prot[s])["corr"],
+            CNV_GExp=two_vars_correlation(cnv[s], gexp[s])["corr"],
+            GExp_Prot=two_vars_correlation(gexp[s], prot[s])["corr"],
         )
         for s in samples
     }
@@ -177,6 +183,7 @@ legend = pd.DataFrame([
   dict(Field="size", Description="Cell line size"),
   dict(Field="media", Description="Cell line culture media"),
   dict(Field="replicates_correlation", Description="Cell line proteomics replicate correlation, mean Pearson's R of cell lines' replicates"),
+  dict(Field="number_of_proteins", Description="Number of proteins quantified per cell line"),
   dict(Field="EMT", Description="Proteomics GSEA enrichment scores of MSigDB - HALLMARK_EPITHELIAL_MESENCHYMAL_TRANSITION gene signature"),
   dict(Field="Proteasome", Description="Proteomics GSEA enrichment scores of MSigDB - BIOCARTA_PROTEASOME_PATHWAY gene signature"),
   dict(Field="TranslationInitiation", Description="Proteomics GSEA enrichment scores of MSigDB - GO_TRANSLATIONAL_INITIATION gene signature"),
@@ -188,5 +195,5 @@ legend = pd.DataFrame([
 
 with pd.ExcelWriter(f"{DPATH}/SupplementaryTable1.xlsx") as writer:
     legend.to_excel(writer, sheet_name="Legend", index=False)
-    sinfo.to_excel(writer, sheet_name="Cell lines", index=False)
-    ms_info.to_excel(writer, sheet_name="MS files", index=False)
+    sinfo.to_excel(writer, sheet_name="Table S1a", index=False)
+    ms_info.to_excel(writer, sheet_name="Table S1b", index=False)

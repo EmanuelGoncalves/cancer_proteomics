@@ -27,6 +27,7 @@ import matplotlib.pyplot as plt
 from crispy.GIPlot import GIPlot
 from adjustText import adjust_text
 from crispy.CrispyPlot import CrispyPlot
+from scipy.stats import pearsonr
 from cancer_proteomics.notebooks import DataImport, PALETTE_TTYPE
 
 
@@ -355,8 +356,8 @@ plot_df = pd.concat(
         crispr.loc[["FOXA1"]].T,
         prot.loc[["BSG", "VIM"]].T,
         ss["Tissue_type"],
-        pam50["pam50"],
-        ss["F2"],
+        pam50[["pam50", "Phenotype"]],
+        ss[["F2", "Cell_line"]],
     ],
     axis=1,
     sort=False,
@@ -371,10 +372,31 @@ g = GIPlot.gi_regression_marginal(
     "BSG", "FOXA1", "pam50",
     plot_df,
     discrete_pal=pal,
+    plot_reg=False,
+    plot_annot=False,
     legend_title="Breast - PAM50",
     hue_order=pal.keys(),
     scatter_kws=dict(edgecolor="w", lw=0.1, s=16),
 )
+
+for c in list(pal.keys())[2:-1]:
+    df = plot_df.query(f"pam50 == '{c}'").dropna(subset=["BSG", "FOXA1"])
+
+    r, p = pearsonr(df["BSG"], df["FOXA1"])
+    print(f"{c}: Pearson's r = {r:.2f}, p-value = {p:.2g}")
+
+    sns.regplot(
+        x=df["BSG"],
+        y=df["FOXA1"],
+        data=plot_df,
+        color=pal[c],
+        truncate=True,
+        fit_reg=True,
+        scatter=False,
+        ci=None,
+        line_kws=dict(lw=1.0, color=pal[c]),
+        ax=g.ax_joint,
+    )
 
 g.ax_joint.set_xlabel(f"BSG\nProtein intensities")
 g.ax_joint.set_ylabel(f"FOXA1\nCRISPR-Cas9 (log2 FC)")
@@ -383,6 +405,65 @@ plt.gcf().set_size_inches(2, 2)
 
 plt.savefig(f"{RPATH}/TopHits_FOXA1_BSG_scatter.pdf", bbox_inches="tight")
 plt.savefig(f"{RPATH}/TopHits_FOXA1_BSG_scatter.png", bbox_inches="tight", dpi=600)
+
+#
+
+for n, df in plot_df.query("pam50 != 'NA' & pam50 != 'Normal'").groupby("pam50"):
+    r, p = pearsonr(df["BSG"], df["FOXA1"])
+    print(f"{n}: Pearson's r = {r:.2f}, p-value = {p:.2g}")
+
+g = sns.lmplot(
+    data=plot_df.query("pam50 != 'NA'"),
+    x="BSG",
+    y="FOXA1",
+    hue="pam50",
+    ci=None,
+    palette=pal,
+    legend_out=False
+)
+
+sns.despine(top=False, right=False)
+
+g.ax.grid(axis="both", lw=0.1, color="#e1e1e1", zorder=0)
+g.ax.set_xlabel(f"BSG\nProtein intensities")
+g.ax.set_ylabel(f"FOXA1\nCRISPR-Cas9 (log2 FC)")
+
+plt.gcf().set_size_inches(2, 2)
+
+plt.savefig(f"{RPATH}/TopHits_FOXA1_BSG_lm_plot.pdf", bbox_inches="tight")
+plt.savefig(f"{RPATH}/TopHits_FOXA1_BSG_lm_plot.png", bbox_inches="tight", dpi=600)
+
+plt.close("all")
+
+#
+
+for n, df in plot_df.dropna(subset=["Phenotype"]).groupby("Phenotype"):
+    if df.shape[0] > 2:
+        r, p = pearsonr(df["BSG"], df["FOXA1"])
+        print(f"{n}: Pearson's r = {r:.2f}, p-value = {p:.2g}")
+
+
+g = sns.lmplot(
+    data=plot_df.dropna(subset=["Phenotype"]),
+    x="BSG",
+    y="FOXA1",
+    hue="Phenotype",
+    legend_out=False
+)
+
+sns.despine(top=False, right=False)
+
+g.ax.grid(axis="both", lw=0.1, color="#e1e1e1", zorder=0)
+g.ax.set_xlabel(f"BSG\nProtein intensities")
+g.ax.set_ylabel(f"FOXA1\nCRISPR-Cas9 (log2 FC)")
+
+plt.gcf().set_size_inches(2.5, 2.5)
+
+plt.savefig(f"{RPATH}/TopHits_FOXA1_BSG_lm_plot_TNBC.pdf", bbox_inches="tight")
+plt.savefig(f"{RPATH}/TopHits_FOXA1_BSG_lm_plot_TNBC.png", bbox_inches="tight", dpi=600)
+
+plt.close("all")
+
 
 # BSG ~ F2 scatter
 g = GIPlot.gi_regression_marginal(

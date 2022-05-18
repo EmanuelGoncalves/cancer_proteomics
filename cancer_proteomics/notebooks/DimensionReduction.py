@@ -27,6 +27,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from crispy import Utils
 from crispy.GIPlot import GIPlot
+from sklearn.preprocessing import scale
 from crispy.Enrichment import Enrichment
 from crispy.CrispyPlot import CrispyPlot
 from scipy.stats import spearmanr
@@ -40,6 +41,7 @@ from cancer_proteomics.notebooks import (
 
 LOG = logging.getLogger("cancer_proteomics")
 DPATH = pkg_resources.resource_filename("data", "/")
+PPIPATH = pkg_resources.resource_filename("data", "ppi/")
 TPATH = pkg_resources.resource_filename("tables", "/")
 RPATH = pkg_resources.resource_filename("cancer_proteomics", "plots/DIANN/")
 
@@ -57,7 +59,21 @@ prot_broad = DataImport.read_protein_matrix_broad()
 
 # Read Transcriptomics
 gexp = DataImport.read_gene_matrix()
+gexp = pd.DataFrame(scale(gexp), index=gexp.index, columns=gexp.columns)
 
+# Read CRISPR
+crispr = DataImport.read_crispr_matrix()
+crispr_institute = DataImport.read_crispr_institute()[crispr.columns]
+
+# Read Methylation
+methy = DataImport.read_methylation_matrix()
+
+# Read Drug-response
+drespo = DataImport.read_drug_response(min_measurements=3)
+dtargets = DataImport.read_drug_target()
+
+# Mobems
+mobems = DataImport.read_mobem()
 
 # Overlaps
 #
@@ -65,38 +81,15 @@ samples = list(set.intersection(set(prot), set(gexp)))
 genes = list(set.intersection(set(prot.index), set(gexp.index), set(prot_broad.index)))
 LOG.info(f"Genes: {len(genes)}; Samples: {len(samples)}")
 
-
-# Data tranformations
-#
-gexp_t = pd.DataFrame({i: Utils.gkn(gexp.loc[i].dropna()).to_dict() for i in genes}).T
-
-
-# Sample-wise Protein/Gene correlation with CopyNumber - Attenuation
-#
-satt_corr = pd.DataFrame(
-    {
-        s: pd.concat(
-            [
-                pd.Series(two_vars_correlation(gexp_t[s], prot[s])).add_prefix(
-                    "gexp_prot_"
-                ),
-                pd.Series(two_vars_correlation(gexp_t[s], prot_broad[s])).add_prefix(
-                    "gexp_prot_broad_"
-                )
-                if s in prot_broad
-                else pd.Series(),
-            ]
-        )
-        for s in samples
-    }
-).T
-
-
 # ### Dimension reduction
 
 # Run PCA and tSNE
 prot_dimred = DimReduction.dim_reduction(prot)
 prot_broad_dimred = DimReduction.dim_reduction(prot_broad)
+
+# Run PCA and tSNE
+gexp_dimred = DimReduction.dim_reduction(gexp)
+
 
 # Plot cell lines in 2D coloured by tissue type
 fig, ax = plt.subplots(figsize=(3.0, 3.0), dpi=600)
@@ -227,21 +220,26 @@ for x_dtype, x_pc, y_dtype, y_pc, thres_abs in enr_pcs_plt:
 
 # ### Covariates
 
+# ### Covariates
 covariates = pd.concat(
     [
+        pd.get_dummies(ss["Tissue_type"])["Haematopoietic and Lymphoid"].rename("Hematopoietic and lymphoid"),
         ss["CopyNumberAttenuation"],
-        ss["GeneExpressionAttenuation"],
-        ss["EMT"],
+        ss["GeneExpressionCorrelation"],
         ss["Proteasome"],
         ss["TranslationInitiation"],
         ss["CopyNumberInstability"],
+        ss["EMT"],
         prot.loc[["CDH1", "VIM"]].T.add_suffix("_prot"),
         gexp.loc[["CDH1", "VIM"]].T.add_suffix("_gexp"),
         pd.get_dummies(ss["media"]),
         pd.get_dummies(ss["growth_properties"]),
-        pd.get_dummies(ss["Tissue_type"])[["Haematopoietic and Lymphoid", "Lung"]],
         ss[["ploidy", "mutational_burden", "growth", "size"]],
         ss["replicates_correlation"].rename("RepsCorrelation"),
+        prot.mean().rename("MeanProteomics"),
+        prot_broad.mean().rename("MeanProteomicsBroad"),
+        methy.mean().rename("MeanMethylation"),
+        drespo.mean().rename("MeanDrugResponse"),
     ],
     axis=1,
 )
@@ -255,7 +253,7 @@ covs_corr = (
     pd.DataFrame(
         [
             {
-                **two_vars_correlation(prot_dimred["pcs"][pc], covariates[c]),
+                **two_vars_correlation(gexp_dimred["pcs"][pc], covariates[c]),
                 **dict(pc=pc, covariate=c),
             }
             for pc in pcs_order
@@ -267,7 +265,7 @@ covs_corr = (
 )
 
 # Plot
-df_vexp = prot_dimred["vexp"][pcs_order]
+df_vexp = gexp_dimred["vexp"][pcs_order]
 df_corr = pd.pivot_table(covs_corr, index="covariate", columns="pc", values="corr").loc[
     covariates.columns, pcs_order
 ]
@@ -317,9 +315,9 @@ axh.set_ylabel("")
 
 plt.subplots_adjust(hspace=0.01)
 plt.savefig(
-    f"{RPATH}/DimensionReduction_Proteomics_PCA_heatmap.pdf", bbox_inches="tight"
+    f"{RPATH}/DimensionReduction_Transcriptomics_PCA_heatmap.pdf", bbox_inches="tight"
 )
 plt.savefig(
-    f"{RPATH}/DimensionReduction_Proteomics_PCA_heatmap.png", bbox_inches="tight"
+    f"{RPATH}/DimensionReduction_Transcriptomics_PCA_heatmap.png", bbox_inches="tight"
 )
 plt.close("all")

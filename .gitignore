@@ -147,4 +147,8 @@ reports/eg/lmm_protein_crispr/**/*data*
 tables/
 ssGSEA_/
 submission/
+cell_submission/
 reports_test/
+cancer_proteomics/plots/metabolomics/
+cancer_proteomics/plots/svg/
+cancer_proteomics/plots/images/

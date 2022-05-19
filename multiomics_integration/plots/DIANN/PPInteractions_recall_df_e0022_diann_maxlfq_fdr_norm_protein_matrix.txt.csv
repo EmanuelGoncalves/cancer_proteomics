@@ -1,0 +1,17 @@
+,ppi,dtype,auc,file
+0,corum,prot,0.8030658775450764,e0022_diann_maxlfq_fdr_norm_protein_matrix.txt
+1,corum,gexp,0.7176874671435417,e0022_diann_maxlfq_fdr_norm_protein_matrix.txt
+2,corum,crispr,0.6306479219117355,e0022_diann_maxlfq_fdr_norm_protein_matrix.txt
+3,corum,merged,0.8186353485823802,e0022_diann_maxlfq_fdr_norm_protein_matrix.txt
+4,biogrid,prot,0.6629612278002347,e0022_diann_maxlfq_fdr_norm_protein_matrix.txt
+5,biogrid,gexp,0.5671938357593546,e0022_diann_maxlfq_fdr_norm_protein_matrix.txt
+6,biogrid,crispr,0.5215578658508535,e0022_diann_maxlfq_fdr_norm_protein_matrix.txt
+7,biogrid,merged,0.6446142473840056,e0022_diann_maxlfq_fdr_norm_protein_matrix.txt
+8,string,prot,0.6954184852674916,e0022_diann_maxlfq_fdr_norm_protein_matrix.txt
+9,string,gexp,0.6475674547840053,e0022_diann_maxlfq_fdr_norm_protein_matrix.txt
+10,string,crispr,0.5701493384315877,e0022_diann_maxlfq_fdr_norm_protein_matrix.txt
+11,string,merged,0.7190870536639136,e0022_diann_maxlfq_fdr_norm_protein_matrix.txt
+12,huri,prot,0.5401224253307495,e0022_diann_maxlfq_fdr_norm_protein_matrix.txt
+13,huri,gexp,0.5248079181379006,e0022_diann_maxlfq_fdr_norm_protein_matrix.txt
+14,huri,crispr,0.5112798552603353,e0022_diann_maxlfq_fdr_norm_protein_matrix.txt
+15,huri,merged,0.5383161594212019,e0022_diann_maxlfq_fdr_norm_protein_matrix.txt

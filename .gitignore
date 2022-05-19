@@ -149,6 +149,6 @@ ssGSEA_/
 submission/
 cell_submission/
 reports_test/
-cancer_proteomics/plots/metabolomics/
-cancer_proteomics/plots/svg/
-cancer_proteomics/plots/images/
+multiomics_integration/plots/metabolomics/
+multiomics_integration/plots/svg/
+multiomics_integration/plots/images/

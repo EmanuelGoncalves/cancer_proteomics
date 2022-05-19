@@ -1,0 +1,17 @@
+,ppi,dtype,auc,file
+0,corum,prot,0.7932353557658232,e0022_maxlfq_pronorm_protein_matrix.txt
+1,corum,gexp,0.7177551793931987,e0022_maxlfq_pronorm_protein_matrix.txt
+2,corum,crispr,0.6306066877481664,e0022_maxlfq_pronorm_protein_matrix.txt
+3,corum,merged,0.8098931331843842,e0022_maxlfq_pronorm_protein_matrix.txt
+4,biogrid,prot,0.6621169866574661,e0022_maxlfq_pronorm_protein_matrix.txt
+5,biogrid,gexp,0.567358947159443,e0022_maxlfq_pronorm_protein_matrix.txt
+6,biogrid,crispr,0.521632203900181,e0022_maxlfq_pronorm_protein_matrix.txt
+7,biogrid,merged,0.6409118913853386,e0022_maxlfq_pronorm_protein_matrix.txt
+8,string,prot,0.697378163928418,e0022_maxlfq_pronorm_protein_matrix.txt
+9,string,gexp,0.6475782270607359,e0022_maxlfq_pronorm_protein_matrix.txt
+10,string,crispr,0.5702072570668323,e0022_maxlfq_pronorm_protein_matrix.txt
+11,string,merged,0.7183126283793533,e0022_maxlfq_pronorm_protein_matrix.txt
+12,huri,prot,0.54144143571943,e0022_maxlfq_pronorm_protein_matrix.txt
+13,huri,gexp,0.5254494913083542,e0022_maxlfq_pronorm_protein_matrix.txt
+14,huri,crispr,0.5114066108657914,e0022_maxlfq_pronorm_protein_matrix.txt
+15,huri,merged,0.543594285516562,e0022_maxlfq_pronorm_protein_matrix.txt

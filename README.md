@@ -5,7 +5,7 @@
 Description
 --
 
-![Graphical_abstract](/Users/scai/PhD/cancer_proteomics/graphical_abstract/Graphical_abstract.png)
+![Graphical_abstract](./graphical_abstract/Graphical_abstract.png)
 
 Pan-cancer proteomic map of 949 human cell lines.
 Goncalves, Poulos & Cai, et al 2022

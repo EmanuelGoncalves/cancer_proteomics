@@ -5,6 +5,8 @@
 Description
 --
 
+![image-20220331110835124](./graphical_abstract/Graphical_abstract.pdf)
+
 Pan-cancer proteomic map of 949 human cell lines.
 Goncalves, Poulos & Cai, et al 2022
 
@@ -18,7 +20,9 @@ Raw mass spectrometry (MS) data were processed with DIA-NN - see associated publ
 
 Major analyses
 --
-Code relating to major analyses found in the associated publication are documented in labelled subfolders in this repository. For example, analysis of cell type specific proteins (Figure 2C-E) are found in the "cell_type_specific_proteins" subfolder. 
+Code relating to major analyses found in the associated publication are documented in labelled subfolders in this repository. For example, the `exploratory_analysis` subfolder contains basic statistical analysis, dimensionality reduction analysis and differential analysis of the proteomic dataset. The `machine_learning` subfolder contains the code for deep learning and benchmarking related analysis.
+
+The README file in each subfolder contains a list that summarises the figures associated with the code in that subfolder for easy navigation. 
 
 
 Contact

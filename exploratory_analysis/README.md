@@ -6,6 +6,8 @@ This folder contains the source code for generating the following figures:
 
 - Figure 2A,B `exploratory_analysis.ipynb`
 
+- Figure 2C-E `cell_type_enriched_protein_analysis.ipynb`
+
 - Figure 3F `run_de_analysis.R`
 
 - Figure S1C,D,E `exploratory_analysis.ipynb`

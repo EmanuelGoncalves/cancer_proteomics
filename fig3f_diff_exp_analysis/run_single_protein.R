@@ -4,7 +4,7 @@ library(doParallel)
 require(svMisc)
 
 wes = read.table(
-  "../../data/genomic/WES_variants_processed.csv.gz",
+  "./data/genomic/WES_variants_processed.csv.gz",
   stringsAsFactors = F,
   sep = ",",
   header = T,
@@ -16,7 +16,7 @@ genes = mut_counts[mut_counts$mut_count > 10, "Gene"]
 
 
 protein = read.table(
-  "../../data/protein/protein_de_processed.csv",
+  "./data/protein/protein_de_processed_20211005.csv",
   stringsAsFactors = F,
   sep = ",",
   header = T,
@@ -50,4 +50,4 @@ res.df <- foreach(i = 1:length(genes),
         }
 stopCluster(cl)
 
-write.table(res.df, "../../result_files/de/protein_signle.csv", sep = ",", quote = F)
+write.table(res.df, "./result_files/de/protein_signle.csv", sep = ",", quote = F)

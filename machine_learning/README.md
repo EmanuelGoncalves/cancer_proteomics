@@ -19,16 +19,16 @@ DeepOmicNet uses following techniques to provide superior predictive performance
 
 ## DeeProM
 
-- Figure 4c (i)
-- Figure 5a
-- Figure 6a-d
-- Figure S6a-c
+- Figure 4C (i)
+- Figure 5A
+- Figure 6A-D
+- Figure S6A-C
 
 `scripts/deepomicnet_drug.py` and `scripts/deepomicnet_crispr.py` - the launching scripts for running DeepOmicNet to predict drug response and CRISPR gene knockout effects. 
 
 ## Benchmarking
 
-- Figure S3c
+- Figure S3C
 
 To compare DeepOmicNet with traditional machine learning models, we also used elastic net and random forest to predict drug responses and CRISPR gene knockout effects, implemented using the package scikit-learn. 
 
@@ -36,7 +36,7 @@ To compare DeepOmicNet with traditional machine learning models, we also used el
 
 ## Downsampling analysis
 
-- Figure 7a,e
+- Figure 7A,E
 
 `generate_downsample.py` - the sciprt used to generate random subset of proteins with bootstraping for ten times. 
 

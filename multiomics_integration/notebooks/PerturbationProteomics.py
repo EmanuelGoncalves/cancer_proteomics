@@ -38,7 +38,7 @@ from sklearn.mixture import GaussianMixture
 from statsmodels.stats.multitest import multipletests
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from crispy.DataImporter import CORUM, BioGRID, PPI, HuRI
-from cancer_proteomics.notebooks import (
+from multiomics_integration.notebooks import (
     DataImport,
     two_vars_correlation,
     PALETTE_TTYPE,

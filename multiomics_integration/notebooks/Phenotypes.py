@@ -39,7 +39,7 @@ from crispy.CrispyPlot import CrispyPlot
 from sklearn.mixture import GaussianMixture
 from statsmodels.stats.multitest import multipletests
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-from cancer_proteomics.notebooks import DataImport, PPI_PAL, PPI_ORDER
+from multiomics_integration.notebooks import DataImport, PPI_PAL, PPI_ORDER
 
 
 LOG = logging.getLogger("cancer_proteomics")

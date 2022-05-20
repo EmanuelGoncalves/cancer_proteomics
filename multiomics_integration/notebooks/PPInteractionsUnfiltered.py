@@ -30,7 +30,7 @@ import matplotlib.pyplot as plt
 from natsort import natsorted
 from sklearn.metrics import auc
 from scipy.stats import pearsonr
-from cancer_proteomics.notebooks import DataImport
+from multiomics_integration.notebooks import DataImport
 from statsmodels.stats.multitest import multipletests
 from crispy.DataImporter import (
     CORUM,

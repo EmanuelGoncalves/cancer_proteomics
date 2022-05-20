@@ -34,7 +34,7 @@ from sklearn.metrics import auc
 from sklearn.preprocessing import scale
 from statsmodels.stats.multitest import multipletests
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-from cancer_proteomics.notebooks import DataImport
+from multiomics_integration.notebooks import DataImport
 from crispy.DataImporter import (
     CORUM,
     BioGRID,

@@ -1,30 +1,13 @@
 #!/usr/bin/env python
 # Copyright (C) 2021 Emanuel Goncalves
 
-import igraph
 import logging
 import numpy as np
 import pandas as pd
 import pkg_resources
 import seaborn as sns
-import numpy.ma as ma
-import itertools as it
 import matplotlib.pyplot as plt
-from natsort import natsorted
-from crispy.GIPlot import GIPlot
-from scipy.stats import pearsonr, spearmanr
-from sklearn.metrics import auc
-from statsmodels.stats.multitest import multipletests
-from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-from cancer_proteomics.notebooks import DataImport
-from scipy.cluster.hierarchy import linkage, dendrogram, fcluster
-from scipy.spatial.distance import squareform
-from crispy.DataImporter import (
-    CORUM,
-    BioGRID,
-    PPI,
-    HuRI,
-)
+from multiomics_integration.notebooks import DataImport
 
 
 LOG = logging.getLogger("cancer_proteomics")

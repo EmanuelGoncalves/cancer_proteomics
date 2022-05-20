@@ -22,7 +22,7 @@ import logging
 import numpy as np
 import pkg_resources
 import matplotlib.pyplot as plt
-from cancer_proteomics.notebooks import DataImport, PALETTE_TTYPE
+from multiomics_integration.notebooks import DataImport, PALETTE_TTYPE
 
 
 LOG = logging.getLogger("cancer_proteomics")

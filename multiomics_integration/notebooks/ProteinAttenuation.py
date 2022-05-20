@@ -32,7 +32,7 @@ from crispy.Enrichment import Enrichment
 from crispy.CrispyPlot import CrispyPlot
 from sklearn.mixture import GaussianMixture
 from statsmodels.stats.multitest import multipletests
-from cancer_proteomics.notebooks import DataImport, two_vars_correlation
+from multiomics_integration.notebooks import DataImport, two_vars_correlation
 from crispy.DataImporter import CORUM
 
 

@@ -29,7 +29,7 @@ from crispy.LMModels import LModel
 from crispy.MOFA import MOFA, MOFAPlot
 from crispy.Enrichment import Enrichment
 from sklearn.preprocessing import scale
-from cancer_proteomics.notebooks import DataImport, two_vars_correlation, PALETTE_TTYPE
+from multiomics_integration.notebooks import DataImport, two_vars_correlation, PALETTE_TTYPE
 
 
 LOG = logging.getLogger("cancer_proteomics")

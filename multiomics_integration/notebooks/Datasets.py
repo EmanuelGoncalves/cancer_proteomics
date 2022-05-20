@@ -25,7 +25,7 @@ import seaborn as sns
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 from crispy import CrispyPlot
-from cancer_proteomics.notebooks import DataImport
+from multiomics_integration.notebooks import DataImport
 
 
 DPATH = pkg_resources.resource_filename("data", "/")

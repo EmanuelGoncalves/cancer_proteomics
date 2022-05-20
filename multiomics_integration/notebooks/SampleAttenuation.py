@@ -32,7 +32,7 @@ from crispy.DataImporter import PPI
 from sklearn.decomposition import PCA
 from crispy.Enrichment import Enrichment
 from crispy.LMModels import LMModels, LModel
-from cancer_proteomics.notebooks import DataImport, two_vars_correlation
+from multiomics_integration.notebooks import DataImport, two_vars_correlation
 
 LOG = logging.getLogger("cancer_proteomics")
 DPATH = pkg_resources.resource_filename("data", "/")

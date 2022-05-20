@@ -25,7 +25,7 @@ from scipy.stats import skew
 from crispy.DataImporter import PPI
 from sklearn.decomposition import PCA
 from crispy.LMModels import LMModels, LModel
-from cancer_proteomics.notebooks import DataImport
+from multiomics_integration.notebooks import DataImport
 
 
 LOG = logging.getLogger("cancer_proteomics")

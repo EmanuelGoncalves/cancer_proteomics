@@ -31,7 +31,7 @@ from sklearn.preprocessing import scale
 from crispy.Enrichment import Enrichment
 from crispy.CrispyPlot import CrispyPlot
 from scipy.stats import spearmanr
-from cancer_proteomics.notebooks import (
+from multiomics_integration.notebooks import (
     DataImport,
     DimReduction,
     two_vars_correlation,

@@ -6,12 +6,10 @@ import numpy as np
 import pandas as pd
 import pkg_resources
 import matplotlib.pyplot as plt
-from crispy.Utils import Utils
 from sklearn.manifold import TSNE
 from crispy.DataImporter import PPI
 from crispy.CrispyPlot import CrispyPlot
 from scipy.stats import spearmanr, pearsonr
-from crispy.LMModels import LMModels, LModel
 from sklearn.decomposition import FactorAnalysis, PCA
 
 

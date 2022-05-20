@@ -27,7 +27,7 @@ import matplotlib.pyplot as plt
 from crispy.GIPlot import GIPlot
 from adjustText import adjust_text
 from crispy.CrispyPlot import CrispyPlot
-from cancer_proteomics.notebooks import DataImport, PALETTE_TTYPE
+from multiomics_integration.notebooks import DataImport, PALETTE_TTYPE
 
 
 LOG = logging.getLogger("cancer_proteomics")

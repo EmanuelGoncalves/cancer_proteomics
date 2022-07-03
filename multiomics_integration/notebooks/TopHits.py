@@ -31,11 +31,11 @@ from scipy.stats import pearsonr
 from multiomics_integration.notebooks import DataImport, PALETTE_TTYPE
 
 
-LOG = logging.getLogger("cancer_proteomics")
+LOG = logging.getLogger("multiomics_integration")
 DPATH = pkg_resources.resource_filename("data", "/")
 PPIPATH = pkg_resources.resource_filename("data", "ppi/")
 TPATH = pkg_resources.resource_filename("tables", "/")
-RPATH = pkg_resources.resource_filename("cancer_proteomics", "plots/DIANN/")
+RPATH = pkg_resources.resource_filename("multiomics_integration", "plots/DIANN/")
 
 
 # ### Imports
@@ -62,6 +62,9 @@ dmaxc = dmaxc.reindex(drespo.index)
 #
 lm_drug = pd.read_csv(f"{TPATH}/lm_sklearn_degr_drug_annotated_diann_051021.csv.gz")
 lm_crispr = pd.read_csv(f"{TPATH}/lm_sklearn_degr_crispr_annotated_diann_051021.csv.gz")
+
+lm_drug_matrix = pd.pivot_table(lm_drug, index="y_id", columns="x_id", values="nc_pval", fill_value=np.nan)
+lm_drug_matrix.to_csv(f"{TPATH}/drug_protein_associations_nc_pval_matrix.csv.gz", compression="gzip")
 
 # Selective and predictive dependencies
 #

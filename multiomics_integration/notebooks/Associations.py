@@ -28,11 +28,11 @@ from crispy.LMModels import LMModels, LModel
 from multiomics_integration.notebooks import DataImport
 
 
-LOG = logging.getLogger("cancer_proteomics")
+LOG = logging.getLogger("multiomics_integration")
 DPATH = pkg_resources.resource_filename("data", "/")
 PPIPATH = pkg_resources.resource_filename("data", "ppi/")
 TPATH = pkg_resources.resource_filename("tables", "/")
-RPATH = pkg_resources.resource_filename("cancer_proteomics", "plots/")
+RPATH = pkg_resources.resource_filename("multiomics_integration", "plots/")
 
 
 # ### Imports

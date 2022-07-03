@@ -36,11 +36,11 @@ from multiomics_integration.notebooks import DataImport, two_vars_correlation
 from crispy.DataImporter import CORUM
 
 
-LOG = logging.getLogger("cancer_proteomics")
+LOG = logging.getLogger("multiomics_integration")
 DPATH = pkg_resources.resource_filename("data", "/")
 TPATH = pkg_resources.resource_filename("tables", "/")
 PPIPATH = pkg_resources.resource_filename("data", "ppi/")
-RPATH = pkg_resources.resource_filename("cancer_proteomics", "plots/DIANN/")
+RPATH = pkg_resources.resource_filename("multiomics_integration", "plots/DIANN/")
 
 
 # ### Imports

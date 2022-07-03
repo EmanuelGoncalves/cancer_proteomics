@@ -32,11 +32,11 @@ from sklearn.preprocessing import scale
 from multiomics_integration.notebooks import DataImport, two_vars_correlation, PALETTE_TTYPE
 
 
-LOG = logging.getLogger("cancer_proteomics")
+LOG = logging.getLogger("multiomics_integration")
 DPATH = pkg_resources.resource_filename("data", "/")
 PPIPATH = pkg_resources.resource_filename("data", "ppi/")
 TPATH = pkg_resources.resource_filename("tables", "/")
-RPATH = pkg_resources.resource_filename("cancer_proteomics", "plots/DIANN/")
+RPATH = pkg_resources.resource_filename("multiomics_integration", "plots/DIANN/")
 
 # ### Imports
 

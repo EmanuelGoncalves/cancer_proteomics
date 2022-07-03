@@ -29,7 +29,7 @@ from multiomics_integration.notebooks import DataImport
 
 
 DPATH = pkg_resources.resource_filename("data", "/")
-RPATH = pkg_resources.resource_filename("cancer_proteomics", "plots/DIANN/")
+RPATH = pkg_resources.resource_filename("multiomics_integration", "plots/DIANN/")
 
 # ### Imports
 

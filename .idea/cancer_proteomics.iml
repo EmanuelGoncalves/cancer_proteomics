@@ -9,7 +9,6 @@
       <excludeFolder url="file://$MODULE_DIR$/data" />
       <excludeFolder url="file://$MODULE_DIR$/figures" />
       <excludeFolder url="file://$MODULE_DIR$/landscape_analysis" />
-      <excludeFolder url="file://$MODULE_DIR$/machine_learning" />
       <excludeFolder url="file://$MODULE_DIR$/reports_test" />
     </content>
     <orderEntry type="jdk" jdkName="Python 3.9 (py39)" jdkType="Python SDK" />
